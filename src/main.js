@@ -1047,6 +1047,7 @@ function loadJSON(path){return fetch(path).then(r=>r.ok?r.json():Promise.reject(
 // Deux JSON pour le battement
 Promise.all([
     loadJSON('public/tiefighter.json'),
+
     loadJSON('public/tieinterceptor.json'),
     loadJSON('public/stardestroyer.json'),
     loadJSON('public/deathstar.json'),
