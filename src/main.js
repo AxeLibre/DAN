@@ -779,7 +779,7 @@ scene.add(screen3);
 
 // 1️⃣ élément vidéo HTML
 const video5 = document.createElement("video");
-video5.src = "screen4.mp4";
+video5.src = "public/screen4.mp4";
 video5.loop = false;
 video5.muted = false;
 video5.playsInline = true;
