@@ -85,9 +85,17 @@
     </style>
   </head>
   <body>
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+          "three/examples/jsm/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+        }
+      }
+    </script>
     <script type="module" src="/src/main.js"></script>
     <div id="loadingScreen">
-      <img src="loading3.png" id="loadingImage" />
+      <img src="./public/loading3.png" id="loadingImage" />
       <div id="loadingText">LOADING...</div>
     </div>
 
