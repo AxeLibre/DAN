@@ -212,9 +212,9 @@ function playSoundSafe(sound) {
 // ==================
 const loader = new THREE.CubeTextureLoader();
 const cubeTexture = loader.load([
-    'public/env8/px.jpg','public/env8/nx.jpg',
-    'public/env8/py.jpg','public/env8/ny.jpg',
-    'public/env8/pz.jpg','public/env8/nz.jpg'
+    './public/env8/px.jpg','./public/env8/nx.jpg',
+    './public/env8/py.jpg','./public/env8/ny.jpg',
+    './public/env8/pz.jpg','./public/env8/nz.jpg'
 ]);
 cubeTexture.colorSpace = THREE.SRGBColorSpace;
 scene.background = cubeTexture;
@@ -677,10 +677,10 @@ loader13.load('public/droid1.glb', (gltf) => {
 
 const textureLoader = new THREE.TextureLoader();
 
-const screenOffTexture1 = textureLoader.load('screen1_off.webp');
-const screenOffTexture2 = textureLoader.load('screen2_off.jpg');
-const screenOffTexture3 = textureLoader.load('screen3_off.jpeg');
-const screenOffTexture4 = textureLoader.load('screen4_off.jpg');
+const screenOffTexture1 = textureLoader.load('public/screen1_off.webp');
+const screenOffTexture2 = textureLoader.load('public/screen2_off.jpg');
+const screenOffTexture3 = textureLoader.load('public/screen3_off.jpeg');
+const screenOffTexture4 = textureLoader.load('public/screen4_off.jpg');
 
 const screenOffMaterial1 = new THREE.MeshBasicMaterial({
     map: screenOffTexture1
@@ -702,7 +702,7 @@ const screenOffMaterial4 = new THREE.MeshBasicMaterial({
 
 
 const video2 = document.createElement("video");
-video2.src = "screen1.mp4";
+video2.src = "public/screen1.mp4";
 video2.loop = false;
 video2.muted = false; // important pour autoplay navigateur
 video2.playsInline = true;
@@ -727,7 +727,7 @@ scene.add(screen);
 
 // 1️⃣ élément vidéo HTML
 const video3 = document.createElement("video");
-video3.src = "screen2.mp4";
+video3.src = "public/screen2.mp4";
 video3.loop = false;
 video3.muted = false;
 video3.playsInline = true;
@@ -754,7 +754,7 @@ scene.add(screen2);
 
 // 1️⃣ élément vidéo HTML
 const video4 = document.createElement("video");
-video4.src = "screen3.mp4";
+video4.src = "public/screen3.mp4";
 video4.loop = false;
 video4.muted = false;
 video4.playsInline = true;
@@ -989,7 +989,7 @@ const tielaserLoader = new GLTFLoader(loadingManager);
 let tielaserMixer;
 let tielaserAction;
 
-tielaserLoader.load('public/tielaser.glb', (gltf) => {
+tielaserLoader.load('./public/tielaser.glb', (gltf) => {
 
     const tielaser = gltf.scene;
     tielaser.scale.set(0.02, 0.02, 0.01);
