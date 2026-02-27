@@ -212,9 +212,9 @@ function playSoundSafe(sound) {
 // ==================
 const loader = new THREE.CubeTextureLoader();
 const cubeTexture = loader.load([
-    '/env8/px.jpg','/env8/nx.jpg',
-    '/env8/py.jpg','/env8/ny.jpg',
-    '/env8/pz.jpg','/env8/nz.jpg'
+    '/public/env8/px.jpg','/public/env8/nx.jpg',
+    '/public/env8/py.jpg','/public/env8/ny.jpg',
+    '/public/env8/pz.jpg','/public/env8/nz.jpg'
 ]);
 cubeTexture.colorSpace = THREE.SRGBColorSpace;
 scene.background = cubeTexture;
@@ -677,10 +677,10 @@ loader13.load('public/droid1.glb', (gltf) => {
 
 const textureLoader = new THREE.TextureLoader();
 
-const screenOffTexture1 = textureLoader.load("screen1_off.webp");
-const screenOffTexture2 = textureLoader.load("screen2_off.jpg");
-const screenOffTexture3 = textureLoader.load("screen3_off.jpeg");
-const screenOffTexture4 = textureLoader.load("screen4_off.jpg");
+const screenOffTexture1 = textureLoader.load('screen1_off.webp');
+const screenOffTexture2 = textureLoader.load('screen2_off.jpg');
+const screenOffTexture3 = textureLoader.load('screen3_off.jpeg');
+const screenOffTexture4 = textureLoader.load('screen4_off.jpg');
 
 const screenOffMaterial1 = new THREE.MeshBasicMaterial({
     map: screenOffTexture1
@@ -1047,7 +1047,6 @@ function loadJSON(path){return fetch(path).then(r=>r.ok?r.json():Promise.reject(
 // Deux JSON pour le battement
 Promise.all([
     loadJSON('public/tiefighter.json'),
-
     loadJSON('public/tieinterceptor.json'),
     loadJSON('public/stardestroyer.json'),
     loadJSON('public/deathstar.json'),
