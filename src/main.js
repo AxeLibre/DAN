@@ -122,7 +122,7 @@ const audioLoader2 = new THREE.AudioLoader();
 
 ambientSound = new THREE.Audio(listener2);
 
-audioLoader2.load('/ambient.mp3', function(buffer) {
+audioLoader2.load('ambient.mp3', function(buffer) {
     ambientSound.setBuffer(buffer);
     ambientSound.setLoop(true);   // ambiance en boucle
     ambientSound.setVolume(0.5);  // volume doux
@@ -130,7 +130,7 @@ audioLoader2.load('/ambient.mp3', function(buffer) {
 
 ambienttie = new THREE.Audio(listener2);
 
-audioLoader2.load('/tie_int2.WAV', function(buffer) {
+audioLoader2.load('tie_int2.WAV', function(buffer) {
     ambienttie.setBuffer(buffer);
     ambienttie.setLoop(true);   // ambiance en boucle
     ambienttie.setVolume(0.5);  // volume doux
@@ -148,19 +148,19 @@ const audioLoader3 = new THREE.AudioLoader();
 const holoOnSound = new THREE.Audio(listener3);
 const holoOffSound = new THREE.Audio(listener3);
 
-audioLoader3.load('/sounds/holo_on.mp3', buffer => {
+audioLoader3.load('sounds/holo_on.mp3', buffer => {
     holoOnSound.setBuffer(buffer);
     holoOnSound.setVolume(1.5);
 });
 
-audioLoader3.load('/sounds/holo_off.mp3', buffer => {
+audioLoader3.load('sounds/holo_off.mp3', buffer => {
     holoOffSound.setBuffer(buffer);
     holoOffSound.setVolume(0.6);
 });
 
 tieOn = new THREE.Audio(listener3);
 
-audioLoader2.load('/tie_on.WAV', function(buffer) {
+audioLoader2.load('tie_on.WAV', function(buffer) {
     tieOn.setBuffer(buffer);
     tieOn.setLoop(false);   // ambiance en boucle
     tieOn.setVolume(0.9);  // volume doux
@@ -168,7 +168,7 @@ audioLoader2.load('/tie_on.WAV', function(buffer) {
 
 tieOff = new THREE.Audio(listener3);
 
-audioLoader2.load('/tie_off.mp3', function(buffer) {
+audioLoader2.load('tie_off.mp3', function(buffer) {
     tieOff.setBuffer(buffer);
     tieOff.setLoop(false);   // ambiance en boucle
     tieOff.setVolume(0.9);  // volume doux
@@ -176,7 +176,7 @@ audioLoader2.load('/tie_off.mp3', function(buffer) {
 
 open = new THREE.Audio(listener3);
 
-audioLoader2.load('/open.mp3', function(buffer) {
+audioLoader2.load('open.mp3', function(buffer) {
     open.setBuffer(buffer);
     open.setLoop(false);   // ambiance en boucle
     open.setVolume(0.9);  // volume doux
@@ -242,7 +242,7 @@ let mixer;
 
 const loader2 = new GLTFLoader(loadingManager);
 
-loader2.load('/projecteur4.glb', (gltf)=>{
+loader2.load('projecteur4.glb', (gltf)=>{
     const projector = gltf.scene;
     projector.position.set(0,-12, 98.5);
     projector.scale.set(10,10,10);
@@ -253,7 +253,7 @@ loader2.load('/projecteur4.glb', (gltf)=>{
 
 const loader3 = new GLTFLoader(loadingManager);
 
-loader3.load('/star_destroyer2.glb', (gltf)=>{
+loader3.load('star_destroyer2.glb', (gltf)=>{
 
     const star_destroyer = gltf.scene;
 
@@ -275,7 +275,7 @@ pivot.add(star_destroyer2);
     
 const loader4= new GLTFLoader(loadingManager);
 
-loader4.load('/star_destroyer0.glb', (gltf)=>{
+loader4.load('star_destroyer0.glb', (gltf)=>{
 
 
     const star_destroyer0 = gltf.scene;
@@ -289,7 +289,7 @@ const loader5 = new GLTFLoader(loadingManager);
 const mixers = []; // tableau global pour stocker les mixers des deathtroopers
 
 
-loader5.load('/stormtrooper2.glb', (gltf) => {
+loader5.load('stormtrooper2.glb', (gltf) => {
     // Premier
     const stormtrooper1 = gltf.scene;
     stormtrooper1.position.set(35, -12, 40);
@@ -334,7 +334,7 @@ loader5.load('/stormtrooper2.glb', (gltf) => {
 
 const loader6 = new GLTFLoader(loadingManager);
 
-loader6.load('/k2so.glb', (gltf) => {
+loader6.load('k2so.glb', (gltf) => {
     // Premier
     const k2so1 = gltf.scene;
     k2so1.position.set(50, -12, 15);
@@ -363,7 +363,7 @@ loader6.load('/k2so.glb', (gltf) => {
 
 const loader7 = new GLTFLoader (loadingManager);
 
-loader7.load('/officer.glb', (gltf) => {
+loader7.load('officer.glb', (gltf) => {
     // Premier
     const officer1 = gltf.scene;
     officer1.position.set(60, -12, 80);
@@ -487,7 +487,7 @@ let hyperbouton;
 
 const loader8 = new GLTFLoader (loadingManager);
 
-loader8.load('/hyperbouton.glb', (gltf)=>{
+loader8.load('hyperbouton.glb', (gltf)=>{
     hyperbouton = gltf.scene;
     hyperbouton.position.set(0,-12, 98.5);
     hyperbouton.scale.set(10,10,10);
@@ -505,7 +505,7 @@ let screenMaterial; // ⚡ ajoute ça
 
 const loader9 = new GLTFLoader (loadingManager);
 
-loader9.load('/hyperscreen.glb', (gltf) => {
+loader9.load('hyperscreen.glb', (gltf) => {
     hyperscreen = gltf.scene;
     hyperscreen.position.set(0,-300,100);
     hyperscreen.scale.set(50,150,70);
@@ -533,7 +533,7 @@ const loader10 = new GLTFLoader (loadingManager);
 let doorleft, doorright;
 let doorState = 0; // 0 = fermé, 1 = ouvert
 
-loader10.load('/doorleft.glb', (gltf)=>{
+loader10.load('doorleft.glb', (gltf)=>{
     doorleft = gltf.scene; //
     doorleft.position.set(-12,-12, 233);
     doorleft.scale.set(10,10,10);
@@ -543,7 +543,7 @@ loader10.load('/doorleft.glb', (gltf)=>{
 
 const loader11 = new GLTFLoader (loadingManager);
 
-loader11.load('/doorright.glb', (gltf)=>{
+loader11.load('doorright.glb', (gltf)=>{
     doorright = gltf.scene; //
     doorright.position.set(12,-12, 233);
     doorright.scale.set(10,10,10);
@@ -625,7 +625,7 @@ function checkGameReady() {
 
 const loader12 = new GLTFLoader (loadingManager);
 
-loader12.load('/tie_fighter0.glb', (gltf) => {
+loader12.load('tie_fighter0.glb', (gltf) => {
     // Premier
     const tiefighter0 = gltf.scene;
     tiefighter0.name = "tie_fighter0";
@@ -650,7 +650,7 @@ loader12.load('/tie_fighter0.glb', (gltf) => {
 
 const loader13 = new GLTFLoader (loadingManager);
 
-loader13.load('/droid1.glb', (gltf) => {
+loader13.load('droid1.glb', (gltf) => {
     // Premier
     const droid1 = gltf.scene;
     droid1.position.set(0, -12, 98.5);
@@ -1046,12 +1046,12 @@ function loadJSON(path){return fetch(path).then(r=>r.ok?r.json():Promise.reject(
 
 // Deux JSON pour le battement
 Promise.all([
-    loadJSON('./tiefighter.json'),
-    loadJSON('./tieinterceptor.json'),
-    loadJSON('./stardestroyer.json'),
-    loadJSON('./deathstar.json'),
-    loadJSON('./darkmaul.json'),
-    loadJSON('./darkvador.json')
+    load('tiefighter.json'),
+    load('tieinterceptor.json'),
+    load('stardestroyer.json'),
+    load('deathstar.json'),
+    load('darkmaul.json'),
+    load('darkvador.json')
 ]).then(datas => {
 
     const shapes = datas.map(d => d.positions);
@@ -1497,7 +1497,7 @@ let doorSoundPlayed = false; // évite de spam le son
 
 doorSound = new THREE.Audio(listener);
 
-audioLoader.load('/door.mp3', function(buffer) {
+audioLoader.load('door.mp3', function(buffer) {
     doorSound.setBuffer(buffer);
     doorSound.setLoop(false);
     doorSound.setVolume(0.7);
