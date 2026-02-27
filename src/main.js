@@ -122,7 +122,7 @@ const audioLoader2 = new THREE.AudioLoader();
 
 ambientSound = new THREE.Audio(listener2);
 
-audioLoader2.load('ambient.mp3', function(buffer) {
+audioLoader2.load('public/ambient.mp3', function(buffer) {
     ambientSound.setBuffer(buffer);
     ambientSound.setLoop(true);   // ambiance en boucle
     ambientSound.setVolume(0.5);  // volume doux
@@ -130,7 +130,7 @@ audioLoader2.load('ambient.mp3', function(buffer) {
 
 ambienttie = new THREE.Audio(listener2);
 
-audioLoader2.load('tie_int2.WAV', function(buffer) {
+audioLoader2.load('public/tie_int2.WAV', function(buffer) {
     ambienttie.setBuffer(buffer);
     ambienttie.setLoop(true);   // ambiance en boucle
     ambienttie.setVolume(0.5);  // volume doux
@@ -148,19 +148,19 @@ const audioLoader3 = new THREE.AudioLoader();
 const holoOnSound = new THREE.Audio(listener3);
 const holoOffSound = new THREE.Audio(listener3);
 
-audioLoader3.load('sounds/holo_on.mp3', buffer => {
+audioLoader3.load('public/sounds/holo_on.mp3', buffer => {
     holoOnSound.setBuffer(buffer);
     holoOnSound.setVolume(1.5);
 });
 
-audioLoader3.load('sounds/holo_off.mp3', buffer => {
+audioLoader3.load('public/sounds/holo_off.mp3', buffer => {
     holoOffSound.setBuffer(buffer);
     holoOffSound.setVolume(0.6);
 });
 
 tieOn = new THREE.Audio(listener3);
 
-audioLoader2.load('tie_on.WAV', function(buffer) {
+audioLoader2.load('public/tie_on.WAV', function(buffer) {
     tieOn.setBuffer(buffer);
     tieOn.setLoop(false);   // ambiance en boucle
     tieOn.setVolume(0.9);  // volume doux
@@ -168,7 +168,7 @@ audioLoader2.load('tie_on.WAV', function(buffer) {
 
 tieOff = new THREE.Audio(listener3);
 
-audioLoader2.load('tie_off.mp3', function(buffer) {
+audioLoader2.load('public/tie_off.mp3', function(buffer) {
     tieOff.setBuffer(buffer);
     tieOff.setLoop(false);   // ambiance en boucle
     tieOff.setVolume(0.9);  // volume doux
@@ -176,7 +176,7 @@ audioLoader2.load('tie_off.mp3', function(buffer) {
 
 open = new THREE.Audio(listener3);
 
-audioLoader2.load('open.mp3', function(buffer) {
+audioLoader2.load('public/open.mp3', function(buffer) {
     open.setBuffer(buffer);
     open.setLoop(false);   // ambiance en boucle
     open.setVolume(0.9);  // volume doux
@@ -190,7 +190,7 @@ camera.add(listener4);
 const R2 = new THREE.Audio(listener4);
 
 const audioLoader4 = new THREE.AudioLoader();
-audioLoader4.load('R2.WAV', function(buffer) {
+audioLoader4.load('public/R2.WAV', function(buffer) {
     R2.setBuffer(buffer);
     R2.setVolume(0.8);
 });
@@ -242,7 +242,7 @@ let mixer;
 
 const loader2 = new GLTFLoader(loadingManager);
 
-loader2.load('projecteur4.glb', (gltf)=>{
+loader2.load('public/projecteur4.glb', (gltf)=>{
     const projector = gltf.scene;
     projector.position.set(0,-12, 98.5);
     projector.scale.set(10,10,10);
@@ -253,7 +253,7 @@ loader2.load('projecteur4.glb', (gltf)=>{
 
 const loader3 = new GLTFLoader(loadingManager);
 
-loader3.load('star_destroyer2.glb', (gltf)=>{
+loader3.load('public/star_destroyer2.glb', (gltf)=>{
 
     const star_destroyer = gltf.scene;
 
@@ -275,7 +275,7 @@ pivot.add(star_destroyer2);
     
 const loader4= new GLTFLoader(loadingManager);
 
-loader4.load('star_destroyer0.glb', (gltf)=>{
+loader4.load('public/star_destroyer0.glb', (gltf)=>{
 
 
     const star_destroyer0 = gltf.scene;
@@ -289,7 +289,7 @@ const loader5 = new GLTFLoader(loadingManager);
 const mixers = []; // tableau global pour stocker les mixers des deathtroopers
 
 
-loader5.load('stormtrooper2.glb', (gltf) => {
+loader5.load('public/stormtrooper2.glb', (gltf) => {
     // Premier
     const stormtrooper1 = gltf.scene;
     stormtrooper1.position.set(35, -12, 40);
@@ -334,7 +334,7 @@ loader5.load('stormtrooper2.glb', (gltf) => {
 
 const loader6 = new GLTFLoader(loadingManager);
 
-loader6.load('k2so.glb', (gltf) => {
+loader6.load('public/k2so.glb', (gltf) => {
     // Premier
     const k2so1 = gltf.scene;
     k2so1.position.set(50, -12, 15);
@@ -363,7 +363,7 @@ loader6.load('k2so.glb', (gltf) => {
 
 const loader7 = new GLTFLoader (loadingManager);
 
-loader7.load('officer.glb', (gltf) => {
+loader7.load('public/officer.glb', (gltf) => {
     // Premier
     const officer1 = gltf.scene;
     officer1.position.set(60, -12, 80);
@@ -487,7 +487,7 @@ let hyperbouton;
 
 const loader8 = new GLTFLoader (loadingManager);
 
-loader8.load('hyperbouton.glb', (gltf)=>{
+loader8.load('public/hyperbouton.glb', (gltf)=>{
     hyperbouton = gltf.scene;
     hyperbouton.position.set(0,-12, 98.5);
     hyperbouton.scale.set(10,10,10);
@@ -505,7 +505,7 @@ let screenMaterial; // ⚡ ajoute ça
 
 const loader9 = new GLTFLoader (loadingManager);
 
-loader9.load('hyperscreen.glb', (gltf) => {
+loader9.load('public/hyperscreen.glb', (gltf) => {
     hyperscreen = gltf.scene;
     hyperscreen.position.set(0,-300,100);
     hyperscreen.scale.set(50,150,70);
@@ -533,7 +533,7 @@ const loader10 = new GLTFLoader (loadingManager);
 let doorleft, doorright;
 let doorState = 0; // 0 = fermé, 1 = ouvert
 
-loader10.load('doorleft.glb', (gltf)=>{
+loader10.load('public/doorleft.glb', (gltf)=>{
     doorleft = gltf.scene; //
     doorleft.position.set(-12,-12, 233);
     doorleft.scale.set(10,10,10);
@@ -543,7 +543,7 @@ loader10.load('doorleft.glb', (gltf)=>{
 
 const loader11 = new GLTFLoader (loadingManager);
 
-loader11.load('doorright.glb', (gltf)=>{
+loader11.load('public/doorright.glb', (gltf)=>{
     doorright = gltf.scene; //
     doorright.position.set(12,-12, 233);
     doorright.scale.set(10,10,10);
@@ -554,7 +554,7 @@ loader11.load('doorright.glb', (gltf)=>{
 let detectionMesh;
 const gltfLoader = new GLTFLoader(loadingManager);
 
-gltfLoader.load('shipDetection.glb', (gltf) => {
+gltfLoader.load('public/shipDetection.glb', (gltf) => {
     detectionMesh = gltf.scene;
     detectionMesh.position.set(0,-12, 100);
     detectionMesh.scale.set(10,9,8.5);
@@ -565,7 +565,7 @@ gltfLoader.load('shipDetection.glb', (gltf) => {
 
 let collisionMesh;
 
-gltfLoader.load('cage.glb', (gltf) => {
+gltfLoader.load('public/cage.glb', (gltf) => {
 
     const ship = gltf.scene;
     ship.position.set(0,-12, 98.5);
@@ -586,7 +586,7 @@ gltfLoader.load('cage.glb', (gltf) => {
 });
 });
 
-gltfLoader.load('star_destroyer_tower.glb', (gltf) => {
+gltfLoader.load('public/star_destroyer_tower.glb', (gltf) => {
     sdt = gltf.scene;
     sdt.visible = false;
     scene.add(sdt);
@@ -595,7 +595,7 @@ gltfLoader.load('star_destroyer_tower.glb', (gltf) => {
     sdt.rotation.y = Math.PI; // faire face à la caméra
 });
 
-gltfLoader.load('tieplayer.glb', (gltf) => {
+gltfLoader.load('public/tieplayer.glb', (gltf) => {
     tiePlayer = gltf.scene;
     tiePlayer.position.set(0, 0, -70);
     tiePlayer.scale.set(3,3,3);
@@ -605,7 +605,7 @@ gltfLoader.load('tieplayer.glb', (gltf) => {
     checkGameReady();
 });
 
-gltfLoader.load('cockpit.glb', (gltf) => {
+gltfLoader.load('public/cockpit.glb', (gltf) => {
     cockpit = gltf.scene;
     cockpit.visible = false;
     camera.add(cockpit);
@@ -625,7 +625,7 @@ function checkGameReady() {
 
 const loader12 = new GLTFLoader (loadingManager);
 
-loader12.load('tie_fighter0.glb', (gltf) => {
+loader12.load('public/tie_fighter0.glb', (gltf) => {
     // Premier
     const tiefighter0 = gltf.scene;
     tiefighter0.name = "tie_fighter0";
@@ -650,7 +650,7 @@ loader12.load('tie_fighter0.glb', (gltf) => {
 
 const loader13 = new GLTFLoader (loadingManager);
 
-loader13.load('droid1.glb', (gltf) => {
+loader13.load('public/droid1.glb', (gltf) => {
     // Premier
     const droid1 = gltf.scene;
     droid1.position.set(0, -12, 98.5);
@@ -1046,12 +1046,12 @@ function loadJSON(path){return fetch(path).then(r=>r.ok?r.json():Promise.reject(
 
 // Deux JSON pour le battement
 Promise.all([
-    load('tiefighter.json'),
-    load('tieinterceptor.json'),
-    load('stardestroyer.json'),
-    load('deathstar.json'),
-    load('darkmaul.json'),
-    load('darkvador.json')
+    loadJSON('public/tiefighter.json'),
+    loadJSON('public/tieinterceptor.json'),
+    loadJSON('public/stardestroyer.json'),
+    loadJSON('public/deathstar.json'),
+    loadJSON('public/darkmaul.json'),
+    loadJSON('public/darkvador.json')
 ]).then(datas => {
 
     const shapes = datas.map(d => d.positions);
@@ -1497,7 +1497,7 @@ let doorSoundPlayed = false; // évite de spam le son
 
 doorSound = new THREE.Audio(listener);
 
-audioLoader.load('door.mp3', function(buffer) {
+audioLoader.load('public/door.mp3', function(buffer) {
     doorSound.setBuffer(buffer);
     doorSound.setLoop(false);
     doorSound.setVolume(0.7);
