@@ -212,9 +212,9 @@ function playSoundSafe(sound) {
 // ==================
 const loader = new THREE.CubeTextureLoader();
 const cubeTexture = loader.load([
-    '/public/env8/px.jpg','/public/env8/nx.jpg',
-    '/public/env8/py.jpg','/public/env8/ny.jpg',
-    '/public/env8/pz.jpg','/public/env8/nz.jpg'
+    'public/env8/px.jpg','public/env8/nx.jpg',
+    'public/env8/py.jpg','public/env8/ny.jpg',
+    'public/env8/pz.jpg','public/env8/nz.jpg'
 ]);
 cubeTexture.colorSpace = THREE.SRGBColorSpace;
 scene.background = cubeTexture;
@@ -875,7 +875,7 @@ const laserLoader = new GLTFLoader(loadingManager);
 let laserMixer;
 let laserAction;
 
-laserLoader.load("laser.glb", (gltf) => {
+laserLoader.load('public/laser.glb', (gltf) => {
 
     const laser = gltf.scene;
     laser.position.set(0,-12, 98.5);
@@ -897,7 +897,7 @@ const laserSound = new THREE.Audio(listener);
 
 const audioLoader = new THREE.AudioLoader();
 
-audioLoader.load("laser.mp3", (buffer) => {
+audioLoader.load('public/laser.mp3', (buffer) => {
     laserSound.setBuffer(buffer);
     laserSound.setVolume(1);
 });
@@ -910,7 +910,7 @@ audioLoader.load("laser.mp3", (buffer) => {
 // 🔊 Son d'alarme
 alarmSound = new THREE.Audio(listener);
 
-audioLoader.load("alarm.mp3", (buffer) => {
+audioLoader.load('public/alarm.mp3', (buffer) => {
     alarmSound.setBuffer(buffer);
     alarmSound.setLoop(true);   // boucle infinie
     alarmSound.setVolume(0.2);
@@ -920,7 +920,7 @@ audioLoader.load("alarm.mp3", (buffer) => {
 
 const panelLoader = new GLTFLoader(loadingManager);
 
-panelLoader.load("alarm.glb", (gltf) => {
+panelLoader.load('public/alarm.glb', (gltf) => {
 
     const panel = gltf.scene;
     panel.position.set(0,-12, 98.5);
@@ -989,7 +989,7 @@ const tielaserLoader = new GLTFLoader(loadingManager);
 let tielaserMixer;
 let tielaserAction;
 
-tielaserLoader.load("tielaser.glb", (gltf) => {
+tielaserLoader.load('public/tielaser.glb', (gltf) => {
 
     const tielaser = gltf.scene;
     tielaser.scale.set(0.02, 0.02, 0.01);
@@ -1011,7 +1011,7 @@ const tielaserSound = new THREE.Audio(listener);
 
 const tieaudioLoader = new THREE.AudioLoader();
 
-tieaudioLoader.load("tielaser.mp3", (buffer) => {
+tieaudioLoader.load('public/tielaser.mp3', (buffer) => {
     tielaserSound.setBuffer(buffer);
     tielaserSound.setVolume(1);
 });
