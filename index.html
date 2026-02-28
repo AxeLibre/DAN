@@ -99,12 +99,20 @@ button:hover {
     <p id="error"></p>
 </div>
 
+<audio id="keySound" src="public/sons/key2.mp3"></audio>
+<audio id="successSound" src="public/sons/success.mp3"></audio>
+<audio id="errorSound" src="public/sons/error.mp3"></audio>
+    
 <script>
 function checkCode() {
 
     const correctCode = "2702"; // ← change ici
     const input = document.getElementById("codeInput").value;
-
+    if (codeSaisi === bonCode) {
+        successSound.play();
+    } else {
+        errorSound.play();
+    }
     if (input === correctCode) {
 
         document.body.style.transition = "1s";
@@ -118,6 +126,17 @@ function checkCode() {
         document.getElementById("error").innerText = "⚠️ Code incorrect, jeune padawan.";
     }
 }
+</script>
+    
+    
+
+<script>
+const keySound = document.getElementById("keySound");
+
+document.addEventListener("keydown", () => {
+    keySound.currentTime = 0; // permet rejouer rapidement
+    keySound.play();
+});
 </script>
 
 </body>
