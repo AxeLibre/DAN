@@ -1,105 +1,116 @@
 <!DOCTYPE html>
 <html lang="fr">
-  <head>
-    <meta charset="UTF-8" />
-    <title>Le Destroyer de DAN</title>
-    <style>
-      body { margin: 0; overflow: hidden; }
-      
-    #loadingScreen {
-        position: fixed;
-        inset: 0;
-        background: url("./public/loadingbg.jpg") center center / cover no-repeat;
-        animation: slowZoom 20s infinite alternate;
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
-        align-items: center;
-        z-index: 9999;
-        transition: opacity 1s ease;
-    }
+<head>
+<meta charset="UTF-8">
+<title>Accès Galactique</title>
 
-    @keyframes slowZoom {
-    from { background-size: 133%; }
-    to   { background-size: 100%; }
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@600&display=swap');
+
+body {
+    margin: 0;
+    height: 100vh;
+    background: radial-gradient(ellipse at bottom, #0b0c1a 0%, #000000 100%);
+    overflow: hidden;
+    font-family: 'Orbitron', sans-serif;
+    color: #ffe81f;
+    display: flex;
+    justify-content: center;
+    align-items: center;
 }
 
-    #loadingImage {
-      position: center;
-        max-width: 400px;
-        margin-bottom: 5px;
-    }
+/* étoiles animées */
+.stars {
+    position: absolute;
+    width: 200%;
+    height: 200%;
+    background: transparent url('https://www.transparenttextures.com/patterns/stardust.png') repeat;
+    animation: moveStars 120s linear infinite;
+    opacity: 0.4;
+}
 
-    #loadingText {
-        color: rgb(221, 218, 10);
-        font-size: 72px;
-        font-family: 'Space Grotesk', system-ui, sans-serif;
-        text-shadow: 0 1px 2px rgba(255, 215, 150, 0.497);
-        animation: pulse 1.5s infinite;
-    }
+@keyframes moveStars {
+    from { transform: translate(0, 0); }
+    to { transform: translate(-500px, -500px); }
+}
 
-    @keyframes pulse {
-        0% { opacity: 0.3; }
-        50% { opacity: 1; }
-        100% { opacity: 0.3; }
-    }
+.container {
+    text-align: center;
+    z-index: 2;
+}
 
-    #playButton {
-        position: fixed;
-        background: linear-gradient(
-    135deg,
-    rgba(49, 60, 63, 0.18),
-    rgba(205, 205, 205, 0.18)
-  );
-        inset: 0;
-        margin: auto;
-        width: 200px;
-        height: 80px;
-        font-size: 24px;
-        font-family: 'Space Grotesk', system-ui, sans-serif;
-        color: rgb(0, 255, 38);
-        border: 2px solid white;
-        cursor: pointer;
-        display: none;
-        z-index: 10000;
-        text-shadow: 0 1px 2px rgba(79, 255, 100, 0.537);
-        transition: all 0.3s ease;
-    }
+h1 {
+    font-size: 2rem;
+    letter-spacing: 3px;
+    margin-bottom: 20px;
+    text-shadow: 0 0 15px #ffe81f;
+}
 
-    #playButton:hover {
-    background: white;
+input {
+    padding: 12px;
+    font-size: 18px;
+    background: black;
+    border: 2px solid #ffe81f;
+    color: #ffe81f;
+    text-align: center;
+    outline: none;
+}
+
+button {
+    margin-top: 20px;
+    padding: 10px 25px;
+    font-size: 16px;
+    background: transparent;
+    border: 2px solid #ffe81f;
+    color: #ffe81f;
+    cursor: pointer;
+    transition: 0.3s;
+}
+
+button:hover {
+    background: #ffe81f;
     color: black;
-
-    box-shadow: 
-        0 0 10px rgb(43, 255, 0),
-        0 0 20px rgb(68, 255, 0),
-        0 0 40px rgb(77, 255, 0);
-
-    transform: scale(1.05);
 }
 
-#playButton:active {
-    transform: scale(0.95);
+#error {
+    margin-top: 15px;
+    color: red;
 }
+</style>
+</head>
 
-    </style>
-  </head>
-  <body>
-    <script type="importmap">
-      {
-        "imports": {
-          "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
-          "three/examples/jsm/": "https://unpkg.com/three@0.160.0/examples/jsm/"
-        }
-      }
-    </script>
-    <script type="module" src="src/main.js"></script>
-    <div id="loadingScreen">
-      <img src="./public/loading3.png" id="loadingImage" />
-      <div id="loadingText">LOADING...</div>
-    </div>
+<body>
 
-    <button id="playButton">PLAY</button>
-  </body>
+<div class="stars"></div>
+
+<div class="container">
+    <h1>🔐 ACCÈS AU VAISSEAU</h1>
+    <input type="password" id="codeInput" placeholder="Code secret">
+    <br>
+    <button onclick="checkCode()">Valider</button>
+    <p id="error"></p>
+</div>
+
+<script>
+function checkCode() {
+
+    const correctCode = "2702"; // ← change ici
+    const input = document.getElementById("codeInput").value;
+
+    if (input === correctCode) {
+
+        document.body.style.transition = "1s";
+        document.body.style.opacity = "0";
+
+        setTimeout(() => {
+            window.location.href = "index2.html";
+        }, 1000);
+
+    } else {
+        document.getElementById("error").innerText = "⚠️ Code incorrect, jeune padawan.";
+    }
+}
+</script>
+
+</body>
 </html>
-
