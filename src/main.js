@@ -55,8 +55,22 @@ let panelAction;
 let alarmSound;
 let alarmActive = false; // état ON/OFF
 let cockpitFloatTime = 0;
-let videoTexture;  // ← variable globale au module
+let video;
+let videoTexture;
+let hyperscreen;
+let screenMaterial;
 
+
+video = document.createElement("video");
+video.src = "public/hyperscreen.mp4";
+video.loop = false;
+video.muted = true; // important
+video.playsInline = true;
+video.pause();
+
+videoTexture = new THREE.VideoTexture(video);
+videoTexture.colorSpace = THREE.SRGBColorSpace;
+videoTexture.flipY = false;
 
 
 
@@ -471,34 +485,10 @@ loader7.load('public/officer.glb', (gltf) => {
 
 
 
-const video = document.createElement("video");
-video.src = "public/hyperscreen.mp4";
-video.loop = false;
-video.muted = true; // obligatoire si autoplay
-video.playsInline = true;
-video.crossOrigin = "anonymous";
-
-document.addEventListener("click", async () => {
-
-    await video.play();
-
-    await new Promise(resolve => {
-        if (video.readyState >= 2) resolve();
-        else video.addEventListener("loadeddata", resolve, { once: true });
-    });
 
 
-    videoTexture = new THREE.VideoTexture(video);
-    videoTexture.colorSpace = THREE.SRGBColorSpace;
-    videoTexture.flipY = false;
-
-    material.map = videoTexture;
-    material.needsUpdate = true;
-
-}, { once: true });
 
 
-let hyperscreen;
 let hyperbouton;
 
 const loader8 = new GLTFLoader (loadingManager);
@@ -517,7 +507,7 @@ loader8.load('public/hyperbouton.glb', (gltf)=>{
 });
 
 
-let screenMaterial; // ⚡ ajoute ça
+
 
 const loader9 = new GLTFLoader (loadingManager);
 
