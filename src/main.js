@@ -197,6 +197,30 @@ audioLoader2.load('public/open.mp3', function(buffer) {
     open.setVolume(0.9);  // volume doux
 });
 
+button1 = new THREE.Audio(listener3);
+
+audioLoader2.load('public/bipbip1_1.WAV', function(buffer) {
+    button1.setBuffer(buffer);
+    button1.setLoop(false);   // ambiance en boucle
+    button1.setVolume(0.9);  // volume doux
+});
+
+button2 = new THREE.Audio(listener3);
+
+audioLoader2.load('public/bipbip_2.WAV', function(buffer) {
+    button2.setBuffer(buffer);
+    button2.setLoop(false);   // ambiance en boucle
+    button2.setVolume(0.9);  // volume doux
+});
+
+button3 = new THREE.Audio(listener3);
+
+audioLoader2.load('public/bipbip_3.mp3', function(buffer) {
+    button3.setBuffer(buffer);
+    button3.setLoop(false);   // ambiance en boucle
+    button3.setVolume(0.9);  // volume doux
+});
+
 // 🎧 Listener
 const listener4 = new THREE.AudioListener();
 camera.add(listener4);
@@ -1375,6 +1399,21 @@ renderer.domElement.addEventListener('click', (event) => {
         if (clickedObject.name.includes("Table_2_Button_Blue_0")) {
 
                 open.play();
+            }
+
+        if (clickedObject.name.includes("Side_Control_Panels_Button_Red_0")) {
+
+                button1.play();
+            }
+
+        if (clickedObject.name.includes("Back_Control_Panels_Button_Red_0")) {
+
+                button2.play();
+            }
+
+        if (clickedObject.name.includes("Side_Control_Panels_Button_Blue_0")) {
+
+                button3.play();
             }
 
         if (clickedObject.name.includes("Object_8")) {
