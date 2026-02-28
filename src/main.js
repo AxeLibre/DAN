@@ -55,6 +55,7 @@ let panelAction;
 let alarmSound;
 let alarmActive = false; // état ON/OFF
 let cockpitFloatTime = 0;
+let videoTexture;  // ← variable globale au module
 
 
 
@@ -486,7 +487,7 @@ document.addEventListener("click", async () => {
         else video.addEventListener("loadeddata", resolve, { once: true });
     });
 
-    let videoTexture;  // ← variable globale au module
+
     videoTexture = new THREE.VideoTexture(video);
     videoTexture.colorSpace = THREE.SRGBColorSpace;
     videoTexture.flipY = false;
@@ -525,7 +526,7 @@ loader9.load('public/hyperscreen.glb', (gltf) => {
     hyperscreen.position.set(0,-300,100);
     hyperscreen.scale.set(50,150,70);
     hyperscreen.rotation.y = Math.PI;
-
+    console.log("videoTexture dans loader:", videoTexture);
     hyperscreen.traverse(obj => {
         if(obj.isMesh){
             screenMaterial = new THREE.MeshBasicMaterial({ // ⚡ récupéré ici
