@@ -1321,13 +1321,14 @@ renderer.domElement.addEventListener('click', (event) => {
         const clickedObject = intersects[0].object; // <-- déclaré ici
         console.log("CLIC SUR :", clickedObject.name);
 
-        if (clickedObject.name.includes("Side_Control_Panels_Button_White_0001")) {
+        if (clickedObject.name.includes("Side_Control_Panels_Button_Blue_0001")) {
 
             if (!isPlaying && video) {
                 isPlaying = true;
                 fadeState = "fadeIn";
                 objectFade = "fadeOut"; // 👈 on lance le fade objets
                 video.currentTime = 0;
+                video.muted = false;   // 🔊 on active le son
                 video.play();
             }
         }
@@ -1356,7 +1357,7 @@ renderer.domElement.addEventListener('click', (event) => {
             playSoundSafe(R2);
         }
 
-        if (clickedObject.name.includes("Side_Control_Panels_Control_Panels_0001")) {
+        if (clickedObject.name.includes("Side_Control_Panels_Control_White_0001")) {
 
             if (laserAction) {
 
