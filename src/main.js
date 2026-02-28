@@ -683,7 +683,7 @@ const loader14 = new GLTFLoader (loadingManager);
 loader14.load('public/bb9.glb', (gltf) => {
     // Premier
     const bb9 = gltf.scene;
-    bb9.position.set(0, -12, 98.5);
+    bb9.position.set(0, -12, 0);
     bb9.scale.set(3,3,3);
     bb9.rotation.y = -Math.PI;
     worldGroup.add(bb9);
