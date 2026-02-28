@@ -1335,7 +1335,7 @@ renderer.domElement.addEventListener('click', (event) => {
 
     
 
-        if (clickedObject.name.includes("HoloTabel_Bottom_Accessories_0")) {
+        if (clickedObject.name.includes("Table_3_Button_Red_0")) {
 
             hologramActive = !hologramActive;
             hologramTarget = hologramActive ? 1 : 0;
@@ -1357,7 +1357,7 @@ renderer.domElement.addEventListener('click', (event) => {
             playSoundSafe(R2);
         }
 
-        if (clickedObject.name.includes("Side_Control_Panels_Control_White_0001")) {
+        if (clickedObject.name.includes("Side_Control_Panels_Button_White_0001")) {
 
             if (laserAction) {
 
