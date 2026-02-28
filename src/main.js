@@ -469,18 +469,17 @@ loader7.load('public/officer.glb', (gltf) => {
 
 
 
-const video = document.createElement("video");
-video.src = "public/hyperscreen.mp4";
-video.loop = false;
-video.muted = false;          // IMPORTANT pour play() auto
-video.playsInline = true;
-video.crossOrigin = "anonymous";
 
-await video.play();          // assure que la vidéo démarre
+const video = document.createElement("video");
+video.src = "public/hyperscreen.mp4"; // ton fichier vidéo
+video.loop = false;
+video.muted = false;       // obligatoire pour autoplay sur Chrome
+video.autoplay = false;            // démarre la vidéo
+video.crossOrigin = 'anonymous';
 
 const videoTexture = new THREE.VideoTexture(video);
-videoTexture.colorSpace = THREE.SRGBColorSpace;
-videoTexture.flipY = false;
+videoTexture.minFilter = THREE.LinearFilter;
+videoTexture.magFilter = THREE.LinearFilter;
 
 
 let hyperscreen;
