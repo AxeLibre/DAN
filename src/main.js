@@ -471,15 +471,29 @@ loader7.load('public/officer.glb', (gltf) => {
 
 
 const video = document.createElement("video");
-video.src = "public/hyperscreen.mp4"; // ton fichier vidéo
+video.src = "public/hyperscreen.mp4";
 video.loop = false;
-video.muted = false;       // obligatoire pour autoplay sur Chrome
-video.autoplay = false;            // démarre la vidéo
-video.crossOrigin = 'anonymous';
+video.muted = true; // obligatoire si autoplay
+video.playsInline = true;
+video.crossOrigin = "anonymous";
 
-const videoTexture = new THREE.VideoTexture(video);
-videoTexture.minFilter = THREE.LinearFilter;
-videoTexture.magFilter = THREE.LinearFilter;
+document.addEventListener("click", async () => {
+
+    await video.play();
+
+    await new Promise(resolve => {
+        if (video.readyState >= 2) resolve();
+        else video.addEventListener("loadeddata", resolve, { once: true });
+    });
+
+    const videoTexture = new THREE.VideoTexture(video);
+    videoTexture.colorSpace = THREE.SRGBColorSpace;
+    videoTexture.flipY = false;
+
+    material.map = videoTexture;
+    material.needsUpdate = true;
+
+}, { once: true });
 
 
 let hyperscreen;
