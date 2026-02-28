@@ -469,7 +469,7 @@ loader7.load('public/officer.glb', (gltf) => {
 
 
 
-const video = document.createElement('video');
+const video = document.createElement("video");
 video.src = "public/hyperscreen.mp4"; // ton fichier vidéo
 video.loop = false;
 video.muted = false;       // obligatoire pour autoplay sur Chrome
