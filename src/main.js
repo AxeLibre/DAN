@@ -684,7 +684,7 @@ loader14.load('public/bb9.glb', (gltf) => {
     // Premier
     const bb9 = gltf.scene;
     bb9.position.set(0, -12, 98.5);
-    bb9.scale.set(3,3,3);
+    bb9.scale.set(10,10,10);
     bb9.rotation.y = -Math.PI;
     worldGroup.add(bb9);
     console.log(gltf.animations);
