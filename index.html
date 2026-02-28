@@ -108,13 +108,11 @@ function checkCode() {
 
     const correctCode = "2702"; // ← change ici
     const input = document.getElementById("codeInput").value;
-    if (codeSaisi === bonCode) {
-        successSound.play();
-    } else {
-        errorSound.play();
-    }
-    if (input === correctCode) {
+  
 
+    if (input === correctCode) {
+        
+        successSound.play();
         document.body.style.transition = "1s";
         document.body.style.opacity = "0";
 
@@ -123,6 +121,7 @@ function checkCode() {
         }, 1000);
 
     } else {
+        errorSound.play();
         document.getElementById("error").innerText = "⚠️ Code incorrect, jeune padawan.";
     }
 }
