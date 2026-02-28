@@ -694,7 +694,7 @@ loader14.load('public/bb9.glb', (gltf) => {
     mixer1.clipAction(gltf.animations[0]).play();
 
     if (gltf.animations.length > 0) {
-        const mixer1 = new THREE.AnimationMixer(droid1);
+        const mixer1 = new THREE.AnimationMixer(bb9);
         const action = mixer1.clipAction(gltf.animations[0]);
         action.play();
         mixers.push(mixer1);
