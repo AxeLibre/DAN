@@ -486,7 +486,8 @@ document.addEventListener("click", async () => {
         else video.addEventListener("loadeddata", resolve, { once: true });
     });
 
-    const videoTexture = new THREE.VideoTexture(video);
+    let videoTexture;  // ← variable globale au module
+    videoTexture = new THREE.VideoTexture(video);
     videoTexture.colorSpace = THREE.SRGBColorSpace;
     videoTexture.flipY = false;
 
