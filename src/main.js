@@ -62,6 +62,8 @@ let video;
 let videoTexture;
 let hyperscreen;
 let screenMaterial;
+let originalPositions = new Map();
+const hyperMoveDistance = 200;
 
 
 video = document.createElement("video");
@@ -1832,35 +1834,65 @@ function animate(){
 }
 
     // 🎬 Fade des objets 3D
-    if (objectFade === "fadeOut") {
+if (objectFade === "fadeOut") {
 
-        objectOpacity -= objectFadeSpeed;
+    objectOpacity -= objectFadeSpeed;
 
-        objectsToFade.forEach(obj => {
-            setOpacityRecursive(obj, objectOpacity);
-        });
+    objectsToFade.forEach(obj => {
 
-        if (objectOpacity <= 0) {
-            objectOpacity = 0;
-            objectsToFade.forEach(obj => obj.visible = false);
-            objectFade = "hidden";
-        }
-    }
+        const origin = obj.userData.originalPosition;
+        if (!origin) return; // évite le crash
 
-    else if (objectFade === "fadeIn") {
+        obj.position.z = origin.z - (hyperMoveDistance * (1 - objectOpacity));
 
-        objectOpacity += objectFadeSpeed;
+        setOpacityRecursive(obj, objectOpacity);
+    });
+
+    if (objectOpacity <= 0) {
+        objectOpacity = 0;
 
         objectsToFade.forEach(obj => {
-            obj.visible = true;
-            setOpacityRecursive(obj, objectOpacity);
+            obj.visible = false;
         });
 
-        if (objectOpacity >= 1) {
-            objectOpacity = 1;
-            objectFade = "idle";
-        }
+        objectFade = "hidden";
     }
+}
+
+else if (objectFade === "fadeIn") {
+
+    objectOpacity += objectFadeSpeed;
+
+    objectsToFade.forEach(obj => {
+
+        // 🔒 Si jamais la position originale n’existe pas,
+        // on la recrée automatiquement
+        if (!obj.userData.originalPosition) {
+            obj.userData.originalPosition = obj.position.clone();
+        }
+
+        const origin = obj.userData.originalPosition;
+
+        obj.visible = true;
+
+        obj.position.z = origin.z + (hyperMoveDistance * (1 - objectOpacity));
+
+        setOpacityRecursive(obj, objectOpacity);
+    });
+
+    if (objectOpacity >= 1) {
+
+        objectOpacity = 1;
+
+        objectsToFade.forEach(obj => {
+            if (obj.userData.originalPosition) {
+                obj.position.copy(obj.userData.originalPosition);
+            }
+        });
+
+        objectFade = "idle";
+    }
+}
 
     updateDoors();
     }
