@@ -202,7 +202,7 @@ audioLoader2.load('public/open.mp3', function(buffer) {
 
 button1 = new THREE.Audio(listener3);
 
-audioLoader2.load('public/bipbip1_1.WAV', function(buffer) {
+audioLoader2.load('public/bipbip1.WAV', function(buffer) {
     button1.setBuffer(buffer);
     button1.setLoop(false);   // ambiance en boucle
     button1.setVolume(0.9);  // volume doux
@@ -210,7 +210,7 @@ audioLoader2.load('public/bipbip1_1.WAV', function(buffer) {
 
 button2 = new THREE.Audio(listener3);
 
-audioLoader2.load('public/bipbip_2.WAV', function(buffer) {
+audioLoader2.load('public/bipbip2.WAV', function(buffer) {
     button2.setBuffer(buffer);
     button2.setLoop(false);   // ambiance en boucle
     button2.setVolume(0.9);  // volume doux
@@ -218,7 +218,7 @@ audioLoader2.load('public/bipbip_2.WAV', function(buffer) {
 
 button3 = new THREE.Audio(listener3);
 
-audioLoader2.load('public/bipbip_3.mp3', function(buffer) {
+audioLoader2.load('public/bipbip3.mp3', function(buffer) {
     button3.setBuffer(buffer);
     button3.setLoop(false);   // ambiance en boucle
     button3.setVolume(0.9);  // volume doux
