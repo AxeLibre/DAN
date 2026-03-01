@@ -44,6 +44,9 @@ let objectFade = "idle"; // "fadeOut" | "hidden" | "fadeIn"
 let objectOpacity = 1;
 const objectFadeSpeed = 0.02;
 let open;
+let button1;
+let button2;
+let button3;
 const screenGeometry = new THREE.PlaneGeometry(16, 9); // format 16:9
 const loadingManager = new THREE.LoadingManager();
 let panelMesh;
