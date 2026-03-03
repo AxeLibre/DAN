@@ -203,6 +203,14 @@ audioLoader2.load('public/open.mp3', function(buffer) {
     open.setVolume(0.9);  // volume doux
 });
 
+transittionsound = new THREE.Audio(listener3);
+
+audioLoader2.load('public/transition.mp3', function(buffer) {
+    transittionsound.setBuffer(buffer);
+    transittionsound.setLoop(false);   // ambiance en boucle
+    transittionsound.setVolume(0.9);  // volume doux
+});
+
 button1 = new THREE.Audio(listener3);
 
 audioLoader2.load('public/bipbip1.WAV', function(buffer) {
