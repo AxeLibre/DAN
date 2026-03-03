@@ -44,6 +44,7 @@ let objectFade = "idle"; // "fadeOut" | "hidden" | "fadeIn"
 let objectOpacity = 1;
 const objectFadeSpeed = 0.02;
 let open;
+let transittionsound;
 let button1;
 let button2;
 let button3;
