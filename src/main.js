@@ -1485,6 +1485,7 @@ renderer.domElement.addEventListener('click', (event) => {
             } else {
                 stopAlarm();
             }
+        }
 
             if (clickedObject.name.includes("Table_4_Button_Red_0")) {
 
@@ -1493,6 +1494,7 @@ renderer.domElement.addEventListener('click', (event) => {
             } else {
                 stopAlarm();
             }
+        }
 
             if (clickedObject.name.includes("Front_Control_Panels_Button_Red_0")) {
 
@@ -1501,6 +1503,7 @@ renderer.domElement.addEventListener('click', (event) => {
             } else {
                 stopAlarm();
             }
+        }
         
 
         
