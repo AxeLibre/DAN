@@ -1505,7 +1505,7 @@ renderer.domElement.addEventListener('click', (event) => {
             }
         }
 
-            if (clickedObject.name.includes("Front_Control_Panels_Button_Red_0")) {
+            if (clickedObject.name.includes("Side_Control_Panels_Button_Red_0001")) {
 
             if (!alarmActive) {
                 startAlarm();
