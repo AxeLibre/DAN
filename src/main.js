@@ -1388,7 +1388,7 @@ renderer.domElement.addEventListener('click', (event) => {
 
     
 
-        if (clickedObject.name.includes("Table_3_Button_Red_0")) {
+        if (clickedObject.name.includes("Table_3_Button_Blue_0")) {
 
             hologramActive = !hologramActive;
             hologramTarget = hologramActive ? 1 : 0;
@@ -1406,6 +1406,16 @@ renderer.domElement.addEventListener('click', (event) => {
                 open.play();
             }
 
+        if (clickedObject.name.includes("Side_Control_Panels_Button_White_0")) {
+
+                button2.play();
+            }
+
+        if (clickedObject.name.includes("Back_Control_Panels_Button_White_0")) {
+
+                button2.play();
+            }
+
         if (clickedObject.name.includes("Side_Control_Panels_Button_Red_0")) {
 
                 button1.play();
@@ -1413,10 +1423,20 @@ renderer.domElement.addEventListener('click', (event) => {
 
         if (clickedObject.name.includes("Back_Control_Panels_Button_Red_0")) {
 
-                button2.play();
+                button1.play();
             }
 
         if (clickedObject.name.includes("Side_Control_Panels_Button_Blue_0")) {
+
+                button3.play();
+            }
+
+        if (clickedObject.name.includes("Back_Control_Panels_Button_Blue_0")) {
+
+                button3.play();
+            }
+
+        if (clickedObject.name.includes("Front_Control_Panels_Button_Blue_0")) {
 
                 button3.play();
             }
@@ -1437,7 +1457,19 @@ renderer.domElement.addEventListener('click', (event) => {
             }
         }
 
-        if (clickedObject.name.includes("Side_Control_Panels_Button_Red_0001")) {
+        if (clickedObject.name.includes("Front_Control_Panels_Button_White_0")) {
+
+            if (laserAction) {
+
+                laserAction.reset();
+                laserAction.play();
+
+                if (laserSound.isPlaying) laserSound.stop();
+                laserSound.play();
+            }
+        }
+
+        if (clickedObject.name.includes("Front_Control_Panels_Button_Red_0")) {
 
             if (!alarmActive) {
                 startAlarm();
@@ -1446,8 +1478,39 @@ renderer.domElement.addEventListener('click', (event) => {
             }
         }
 
+        if (clickedObject.name.includes("Table_1_Button_Red_0")) {
+
+            if (!alarmActive) {
+                startAlarm();
+            } else {
+                stopAlarm();
+            }
+
+            if (clickedObject.name.includes("Table_4_Button_Red_0")) {
+
+            if (!alarmActive) {
+                startAlarm();
+            } else {
+                stopAlarm();
+            }
+
+            if (clickedObject.name.includes("Front_Control_Panels_Button_Red_0")) {
+
+            if (!alarmActive) {
+                startAlarm();
+            } else {
+                stopAlarm();
+            }
         
 
+        
+                // Vérifier si c’est ton bouton rouge
+        if (clickedObject.name.includes("Table_3_Button_Red_0")) {
+            onButtonClick(); // Appelle la fonction de gestion du clic
+            transittionsound.stop(); // Arrêter le son s'il est en cours de lecture
+            transittionsound.play();
+        }
+        
         
         
             
@@ -1730,6 +1793,28 @@ console.log("Player:", player.position);
 console.log("Detection:", detectionBox);
 
 
+// ------------------------------------------------------------
+// Fonction morph suivant avec bouton
+// ------------------------------------------------------------
+function onButtonClick() {
+    if (!material || !positionAttr || !targetAttr) return;
+
+    // Préparer la prochaine forme
+    positionAttr.array.set(targetAttr.array);
+    positionAttr.needsUpdate = true;
+
+    currentIndex = nextIndex;
+    nextIndex = (nextIndex + 1) % shapes.length;
+
+    targetAttr.array.set(shapes[nextIndex]);
+    targetAttr.needsUpdate = true;
+
+    // Reset morph pour lancer la transition
+    material.uniforms.morph.value = 0;
+    morphState = "morph";
+}
+
+
 
 
 // ==================
@@ -1751,44 +1836,21 @@ function animate(){
         currentFlightSpeed = walkSpeed;
     }
 
-    if(material && positionAttr && targetAttr){
 
-        material.uniforms.time.value += dt;
+    if (!material) return;
 
-        if(morphState === "morph"){
+    // Mettre à jour le temps pour d'autres effets éventuels
+    material.uniforms.time.value += dt;
 
-            material.uniforms.morph.value += dt / morphDuration;
+    // Si une morph est en cours, on incrémente la progression
+    if (morphState === "morph") {
+        material.uniforms.morph.value += dt / morphDuration;
 
-            if(material.uniforms.morph.value >= 1){
-
-                material.uniforms.morph.value = 1;
-                morphState = "pause";
-                pauseTimer = 0;
-            }
-
-        } else if(morphState === "pause"){
-
-            pauseTimer += dt;
-
-            if(pauseTimer >= pauseDuration){
-
-                // 🔁 Préparer la prochaine transition
-
-                positionAttr.array.set(targetAttr.array);
-                positionAttr.needsUpdate = true;
-
-                currentIndex = nextIndex;
-                nextIndex = (nextIndex + 1) % shapes.length;
-
-                targetAttr.array.set(shapes[nextIndex]);
-                targetAttr.needsUpdate = true;
-
-                material.uniforms.morph.value = 0;
-
-                morphState = "morph";
-            }
+        if (material.uniforms.morph.value >= 1) {
+            material.uniforms.morph.value = 1;
+            morphState = "done"; // Transition terminée
         }
-      }
+    }
 
     mixers.forEach(m => m.update(dt));
 
@@ -1961,3 +2023,6 @@ else if (objectFade === "fadeIn") {
     
 
 }
+
+// Démarrer l'animation
+requestAnimationFrame(animate);
