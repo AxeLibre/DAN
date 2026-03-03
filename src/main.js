@@ -1114,12 +1114,18 @@ function loadJSON(path){return fetch(path).then(r=>r.ok?r.json():Promise.reject(
 
 // Deux JSON pour le battement
 Promise.all([
+    loadJSON('public/empire.json'),
+    loadJSON('public/empire.json'),
     loadJSON('public/tiefighter.json'),
     loadJSON('public/tieinterceptor.json'),
+    loadJSON('public/tiebomber.json'),
+    loadJSON('public/atst.json'),
+    loadJSON('public/atat.json'),
     loadJSON('public/stardestroyer.json'),
     loadJSON('public/deathstar.json'),
     loadJSON('public/darkmaul.json'),
-    loadJSON('public/darkvador.json')
+    loadJSON('public/darkvador.json'),
+    loadJSON('public/kylo.json')
 ]).then(datas => {
 
     const shapes = datas.map(d => d.positions);
