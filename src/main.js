@@ -48,6 +48,11 @@ let transittionsound;
 let button1;
 let button2;
 let button3;
+let poweroff;
+let explosion;
+let ctrlScreenVisible = false;
+let ctrlScreenFadeDirection = 0; // 1 = fade in, -1 = fade out
+const ctrlScreenFadeSpeed = 1.5;
 const screenGeometry = new THREE.PlaneGeometry(16, 9); // format 16:9
 const loadingManager = new THREE.LoadingManager();
 let panelMesh;
@@ -178,6 +183,14 @@ audioLoader3.load('public/sounds/holo_off.mp3', buffer => {
     holoOffSound.setBuffer(buffer);
     holoOffSound.setVolume(0.6);
 });
+
+const holoOff2Sound = new THREE.Audio(listener3);
+
+audioLoader3.load('public/sounds/holooff.mp3', buffer => {
+    holoOff2Sound.setBuffer(buffer);
+    holoOff2Sound.setVolume(0.6);
+});
+
 
 tieOn = new THREE.Audio(listener3);
 
@@ -522,7 +535,32 @@ loader7.load('public/officer.glb', (gltf) => {
 
 
 
+const ctrlscreen = document.createElement("video");
+ctrlscreen.src = "controlscreen.mp4";
+ctrlscreen.loop = true;
+ctrlscreen.muted = true;
 
+const ctrlTexture = new THREE.VideoTexture(ctrlscreen);
+
+const ctrlMaterial = new THREE.MeshBasicMaterial({
+    map: ctrlTexture,
+    transparent: true,
+    opacity: 0, // écran invisible au départ
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    toneMapped: false
+});
+
+const ctrlPlane = new THREE.Mesh(
+    new THREE.PlaneGeometry(12, 6),
+    ctrlMaterial
+);
+
+ctrlPlane.position.set(0, 5.3, 142);
+ctrlPlane.rotation.y = Math.PI;
+ctrlPlane.rotation.x = -Math.PI / 12;
+
+scene.add(ctrlPlane);
 
 
 
@@ -1104,7 +1142,40 @@ function handleSpaceAction() {
     }
 }
 
+//===================================================
+// CONTROL SCREEN
+//===================================================
 
+
+function toggleCtrlScreen() {
+
+    if (ctrlScreenVisible) {
+        ctrlScreenFadeDirection = -1; // fade out
+    } else {
+        ctrlScreenFadeDirection = 1; // fade in
+        ctrlscreen.play(); // démarre la vidéo si on l'allume
+    }
+
+    ctrlScreenVisible = !ctrlScreenVisible;
+}
+
+function updateCtrlScreenFade(dt) {
+
+    if (ctrlScreenFadeDirection === 0) return;
+
+    ctrlMaterial.opacity += ctrlScreenFadeDirection * ctrlScreenFadeSpeed * dt;
+
+    ctrlMaterial.opacity = THREE.MathUtils.clamp(ctrlMaterial.opacity, 0, 1);
+
+    if (ctrlMaterial.opacity === 0) {
+        ctrlScreenFadeDirection = 0;
+        ctrlscreen.pause(); // pause quand écran éteint
+    }
+
+    if (ctrlMaterial.opacity === 1) {
+        ctrlScreenFadeDirection = 0;
+    }
+}
 
 
 // ===================================================
@@ -1409,11 +1480,11 @@ renderer.domElement.addEventListener('click', (event) => {
             hologramTarget = hologramActive ? 1 : 0;
 
             if (hologramActive) {
-                if (holoOnSound.isPlaying) holoOnSound.stop();
-                holoOnSound.play();
-            } else {
-                if (holoOffSound.isPlaying) holoOffSound.stop();
+                if (holooffSound.isPlaying) holoOffSound.stop();
                 holoOffSound.play();
+            } else {
+                if (holoOff2Sound.isPlaying) holoOff2Sound.stop();
+                holoOff2Sound.play();
             }
         }
         if (clickedObject.name.includes("Table_2_Button_Blue_0")) {
@@ -1519,6 +1590,13 @@ renderer.domElement.addEventListener('click', (event) => {
                 stopAlarm();
             }
         }
+
+            if (clickedObject.name.includes("Side_Control_Panels_Control_Panels_0001")) {
+
+                toggleCtrlScreen();
+               holoOnSound.play();
+    
+            }
         
 
         
@@ -2034,7 +2112,8 @@ else if (objectFade === "fadeIn") {
         console.log(cockpitFloatTime);
     }
 
-    
+
+    updateCtrlScreenFade(dt);
 
     renderer.render(scene,camera);
 
