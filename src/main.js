@@ -536,7 +536,7 @@ loader7.load('public/officer.glb', (gltf) => {
 
 
 const ctrlscreen = document.createElement("video");
-ctrlscreen.src = "controlscreen.mp4";
+ctrlscreen.src = "public/controlscreen.mp4";
 ctrlscreen.loop = true;
 ctrlscreen.muted = true;
 
