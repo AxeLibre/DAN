@@ -1480,7 +1480,7 @@ renderer.domElement.addEventListener('click', (event) => {
             hologramTarget = hologramActive ? 1 : 0;
 
             if (hologramActive) {
-                if (holooffSound.isPlaying) holoOffSound.stop();
+                if (holoOffSound.isPlaying) holoOffSound.stop();
                 holoOffSound.play();
             } else {
                 if (holoOff2Sound.isPlaying) holoOff2Sound.stop();
