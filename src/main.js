@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js';
-import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
+import { RGBELoader } from 'https://cdn.jsdelivr.net/npm/three@0.160/examples/jsm/loaders/RGBELoader.js';
 
 let scene, camera, renderer;
 let particleSystem, material;
@@ -127,16 +127,16 @@ camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0
 camera.position.set(0,0,0);
 camera.rotation.order = "YXZ";
 
-const hdrloader = new HDRLoader();
+const hdrloader = new RGBELoader();
 
-hdrloader.load('public/studio.hdr', (texture) => {
+hdrloader.load("studio.hdr", (texture) => {
 
     const pmremGenerator = new THREE.PMREMGenerator(renderer);
     const envMap = pmremGenerator.fromEquirectangular(texture).texture;
 
     scene.environment = envMap;
 
-    texture.dispose(); 
+    texture.dispose();
     pmremGenerator.dispose();
 
 });
