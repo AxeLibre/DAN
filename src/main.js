@@ -128,7 +128,7 @@ camera.rotation.order = "YXZ";
 
 const hdrloader = new HDRLoader();
 
-hdrloader.load("studio.hdr", (texture) => {
+hdrloader.load('public/studio.hdr', (texture) => {
 
     const pmremGenerator = new THREE.PMREMGenerator(renderer);
     const envMap = pmremGenerator.fromEquirectangular(texture).texture;
