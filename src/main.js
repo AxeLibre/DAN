@@ -32,10 +32,10 @@ let cockpit;
 let detectionBox = new THREE.Box3();
 let sdt;
 let collisionRaycaster = new THREE.Raycaster();
-const walkSpeed = 0.35;
-const flightSpeed = 1.3; // 🚀 plus rapide
-let currentFlightSpeed = 0;
-const maxFlightSpeed = 2.5;
+const walkSpeed = 0.25;
+const flightSpeed = 1; // 🚀 plus rapide
+let currentFlightSpeed = 1; // pour accélération progressive
+const maxFlightSpeed = 1;
 const acceleration = 0.05;
 let ambienttie; 
 let tieOn;
@@ -1949,6 +1949,12 @@ function animate(){
             maxFlightSpeed,
             acceleration
         );
+        // direction de la caméra
+    const direction = new THREE.Vector3();
+    camera.getWorldDirection(direction);
+
+    // avancer automatiquement
+    player.position.addScaledVector(direction, currentFlightSpeed * 50 * dt);
     } else {
         currentFlightSpeed = walkSpeed;
     }
