@@ -171,13 +171,22 @@ camera.add(listener3);
 
 const audioLoader3 = new THREE.AudioLoader();
 
-const holoOnSound = new THREE.Audio(listener3);
-const holoOffSound = new THREE.Audio(listener3);
+const ctrlscreenon = new THREE.Audio(listener3);
+
 
 audioLoader3.load('public/sounds/holo_on.mp3', buffer => {
-    holoOnSound.setBuffer(buffer);
-    holoOnSound.setVolume(1.5);
+    ctrlscreenon.setBuffer(buffer);
+    ctrlscreenon.setVolume(1.5);
 });
+
+const ctrlscreenoff = new THREE.Audio(listener3);
+
+audioLoader3.load('public/sounds/ctrlscreenoff.mp3', buffer => {
+    ctrlscreenoff.setBuffer(buffer);
+    ctrlscreenoff.setVolume(1.5);
+});
+
+const holoOffSound = new THREE.Audio(listener3);
 
 audioLoader3.load('public/sounds/holo_off.mp3', buffer => {
     holoOffSound.setBuffer(buffer);
@@ -1152,8 +1161,12 @@ function toggleCtrlScreen() {
 
     if (ctrlScreenVisible) {
         ctrlScreenFadeDirection = -1; // fade out
+        ctrlscreenoff.stop();
+        ctrlscreenoff.play();
     } else {
         ctrlScreenFadeDirection = 1; // fade in
+        ctrlscreenon.stop();
+        ctrlscreenon.play();
         ctrlscreen.play(); // démarre la vidéo si on l'allume
     }
 
@@ -1603,8 +1616,6 @@ renderer.domElement.addEventListener('click', (event) => {
             if (clickedObject.name.includes("Side_Control_Panels_Control_Panels_0001")) {
 
                 toggleCtrlScreen();
-               holoOnSound.stop();
-               holoOnSound.play();
     
             }
         
