@@ -559,6 +559,7 @@ const ctrlPlane = new THREE.Mesh(
 ctrlPlane.position.set(0, 5.3, 142);
 ctrlPlane.rotation.y = Math.PI;
 ctrlPlane.rotation.x = -Math.PI / 12;
+ctrlPlane.scale.x = 0;
 
 scene.add(ctrlPlane);
 
@@ -1163,17 +1164,25 @@ function updateCtrlScreenFade(dt) {
 
     if (ctrlScreenFadeDirection === 0) return;
 
+    // fade
     ctrlMaterial.opacity += ctrlScreenFadeDirection * ctrlScreenFadeSpeed * dt;
-
     ctrlMaterial.opacity = THREE.MathUtils.clamp(ctrlMaterial.opacity, 0, 1);
 
+    // scale TV
+    ctrlPlane.scale.x += ctrlScreenFadeDirection * ctrlScreenFadeSpeed * dt;
+    ctrlPlane.scale.x = THREE.MathUtils.clamp(ctrlPlane.scale.x, 0, 1);
+
     if (ctrlMaterial.opacity === 0) {
+
         ctrlScreenFadeDirection = 0;
-        ctrlscreen.pause(); // pause quand écran éteint
+        ctrlscreen.pause();
+
     }
 
     if (ctrlMaterial.opacity === 1) {
+
         ctrlScreenFadeDirection = 0;
+
     }
 }
 
@@ -1594,6 +1603,7 @@ renderer.domElement.addEventListener('click', (event) => {
             if (clickedObject.name.includes("Side_Control_Panels_Control_Panels_0001")) {
 
                 toggleCtrlScreen();
+               holoOnSound.stop();
                holoOnSound.play();
     
             }
