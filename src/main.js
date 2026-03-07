@@ -126,12 +126,26 @@ camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0
 camera.position.set(0,0,0);
 camera.rotation.order = "YXZ";
 
+const hdrloader = new HDRLoader();
+
+hdrloader.load("studio.hdr", (texture) => {
+
+    const pmremGenerator = new THREE.PMREMGenerator(renderer);
+    const envMap = pmremGenerator.fromEquirectangular(texture).texture;
+
+    scene.environment = envMap;
+
+    texture.dispose(); 
+    pmremGenerator.dispose();
+
+});
+
 // Renderer
 renderer = new THREE.WebGLRenderer({antialias:true});
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1;
+renderer.toneMappingExposure = 0.3;
 document.body.appendChild(renderer.domElement);
 
 // Lumière
