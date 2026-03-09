@@ -24,7 +24,6 @@ const hologramFadeSpeed = 0.03;
 let playerBox = new THREE.Box3();
 let isInsideShip = true;
 let playerState = "walk"; // "walk" | "flight"
-let tiePlayer;
 let gameReady;
 let tieLoaded = false;
 let cockpitLoaded = false;
