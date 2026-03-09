@@ -1713,19 +1713,25 @@ function tryMove(moveVector){
 
 }
 
-function updateCamera() {
 
-    // Rotation
-    if (keys.ArrowRight) player.rotation.y -= rotationSpeed;
-    if (keys.ArrowLeft)  player.rotation.y += rotationSpeed;
+function updateCamera(dt = 0.016) {
 
+    // accélération
+    if (keys.ArrowRight) rotationVelocity -= rotationAcceleration * dt;
+    if (keys.ArrowLeft)  rotationVelocity += rotationAcceleration * dt;
+
+    // clamp vitesse max
+    rotationVelocity = THREE.MathUtils.clamp(rotationVelocity, -maxRotationSpeed, maxRotationSpeed);
+
+    // appliquer rotation
+    player.rotation.y += rotationVelocity;
+
+    // friction / inertie
+    rotationVelocity *= rotationDamping;
+
+    // déplacement
     let moveVector = new THREE.Vector3();
-
-    // 👇 on choisit la vitesse selon l'état
-    const currentSpeed = (playerState === "flight") 
-        ? flightSpeed 
-        : walkSpeed;
-
+    const currentSpeed = (playerState === "flight") ? flightSpeed : walkSpeed;
     if (keys.ArrowUp)    moveVector.z -= currentSpeed;
     if (keys.ArrowDown)  moveVector.z += currentSpeed;
 
