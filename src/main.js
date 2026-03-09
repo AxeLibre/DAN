@@ -735,11 +735,11 @@ gltfLoader.load('public/star_destroyer_tower.glb', (gltf) => {
 });
 
 gltfLoader.load('public/tieplayer.glb', (gltf) => {
-    tiePlayer = gltf.scene;
-    tiePlayer.position.set(0, -1, -70);
-    tiePlayer.scale.set(2,2,2);
-    tiePlayer.rotation.y = Math.PI; // faire face à la caméra
-    scene.add(tiePlayer);
+    tiePlayer1 = gltf.scene;
+    tiePlayer1.position.set(0, -1, -70);
+    tiePlayer1.scale.set(2,2,2);
+    tiePlayer1.rotation.y = Math.PI; 
+    scene.add(tiePlayer1);
     tieLoaded = true;
     checkGameReady();
     addShip(tiePlayer1);
