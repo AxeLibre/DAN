@@ -3,6 +3,7 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { RGBELoader } from 'https://cdn.jsdelivr.net/npm/three@0.160/examples/jsm/loaders/RGBELoader.js';
 
+
 let scene, camera, renderer;
 let particleSystem, material;
 let mouse = new THREE.Vector3();
@@ -144,7 +145,7 @@ renderer.toneMappingExposure = 0.3;
 document.body.appendChild(renderer.domElement);
 
 
-const hdrloader = new HDRLoader();
+const hdrloader = new RGBELoader().setDataType(THREE.FloatType);
 
 hdrloader.load("studio.hdr", (texture) => {
 
