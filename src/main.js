@@ -736,8 +736,8 @@ gltfLoader.load('public/star_destroyer_tower.glb', (gltf) => {
 
 gltfLoader.load('public/tieplayer.glb', (gltf) => {
     tiePlayer = gltf.scene;
-    tiePlayer.position.set(0, 0, -70);
-    tiePlayer.scale.set(3,3,3);
+    tiePlayer.position.set(0, -1, -70);
+    tiePlayer.scale.set(2,2,2);
     tiePlayer.rotation.y = Math.PI; // faire face à la caméra
     scene.add(tiePlayer);
     tieLoaded = true;
@@ -1751,6 +1751,7 @@ renderer.domElement.addEventListener('click', (event) => {
 
         if (shipHit.length > 0) {
             
+            tiechange.stop();
             tiechange.play();
             // cacher le vaisseau actuel
             ships[shipIndex].visible = false;
