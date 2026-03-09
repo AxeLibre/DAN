@@ -78,7 +78,14 @@ let rotationVelocity = 0;
 const rotationAcceleration = 0.2;
 const rotationDamping = 0.85;
 const maxRotationSpeed = 0.3;      // limite max rad/frame
-
+let ships = [];
+let shipIndex = 0;
+let tiePlayer = null;
+let tiePlayer1;
+let tiefighter;
+let tieinterceptor;
+let tiesilencer;
+let tiechange; 
 
 video = document.createElement("video");
 video.src = "public/hyperscreen.mp4";
@@ -289,6 +296,14 @@ audioLoader2.load('public/bipbip3.mp3', function(buffer) {
     button3.setBuffer(buffer);
     button3.setLoop(false);   // ambiance en boucle
     button3.setVolume(0.9);  // volume doux
+});
+
+tiechange = new THREE.Audio(listener3);
+
+audioLoader2.load('public/tiechange.WAV', function(buffer) {
+    tiechange.setBuffer(buffer);
+    tiechange.setLoop(false);   
+    tiechange.setVolume(1.0);  
 });
 
 // 🎧 Listener
@@ -731,6 +746,56 @@ gltfLoader.load('public/tieplayer.glb', (gltf) => {
     checkGameReady();
 });
 
+gltfLoader.load('public/tiefighter.glb', (gltf) => {
+    tiefighter = gltf.scene;
+    tiefighter.position.set(0, -1, -70);
+    tiefighter.scale.set(0.02,0.02,0.02);
+    tiefighter.rotation.y = Math.PI; 
+    scene.add(tiefighter);
+    tieLoaded = true;
+    checkGameReady();
+    addShip(tiefighter);
+});
+
+gltfLoader.load('public/tieinter.glb', (gltf) => {
+    tieinterceptor = gltf.scene;
+    tieinterceptor.position.set(0, -1, -70);
+    tieinterceptor.scale.set(2,2,2);
+    tieinterceptor.rotation.y = Math.PI; 
+    scene.add(tieinterceptor);
+    tieLoaded = true;
+    checkGameReady();
+    addShip(tieinterceptor);
+
+});
+
+gltfLoader.load('public/tiesilencer.glb', (gltf) => {
+    tiesilencer = gltf.scene;
+    tiesilencer.position.set(0, -1, -70);
+    tiesilencer.scale.set(6,6,6);
+    tiesilencer.rotation.y = Math.PI; 
+    scene.add(tiesilencer);
+    tieLoaded = true;
+    checkGameReady();
+    addShip(tiesilencer);
+});
+
+
+function addShip(ship) {
+
+    ships.push(ship);
+    ship.visible = false;
+
+    // premier vaisseau
+    if (ships.length === 1) {
+        ship.visible = true;
+        tiePlayer = ship;
+        tiePlayer.userData.baseY = -1;
+    }
+}
+
+
+
 gltfLoader.load('public/cockpit.glb', (gltf) => {
     cockpit = gltf.scene;
     cockpit.visible = false;
@@ -832,20 +897,28 @@ const screenOffTexture2 = textureLoader.load('public/screen2_off.jpg');
 const screenOffTexture3 = textureLoader.load('public/screen3_off.jpeg');
 const screenOffTexture4 = textureLoader.load('public/screen4_off.jpg');
 
-const screenOffMaterial1 = new THREE.MeshBasicMaterial({
-    map: screenOffTexture1
+const screenOffMaterial1 = new THREE.MeshStandardMaterial({
+    map: screenOffTexture1,
+    roughness: 0.2,   // plus petit = plus brillant
+    metalness: 0.4    // intensité reflet
 });
 
-const screenOffMaterial2 = new THREE.MeshBasicMaterial({
-    map: screenOffTexture2
+const screenOffMaterial2 = new THREE.MeshStandardMaterial({
+    map: screenOffTexture2,
+    roughness: 0.2,
+    metalness: 0.4
 });
 
-const screenOffMaterial3 = new THREE.MeshBasicMaterial({
-    map: screenOffTexture3
+const screenOffMaterial3 = new THREE.MeshStandardMaterial({
+    map: screenOffTexture3,
+    roughness: 0.2,
+    metalness: 0.4
 });
 
-const screenOffMaterial4 = new THREE.MeshBasicMaterial({
-    map: screenOffTexture4
+const screenOffMaterial4 = new THREE.MeshStandardMaterial({
+    map: screenOffTexture4,
+    roughness: 0.2,
+    metalness: 0.4
 });
 
 
@@ -861,8 +934,10 @@ video2.pause(); // démarre en pause
 const videoTexture2 = new THREE.VideoTexture(video2);
 videoTexture2.colorSpace = THREE.SRGBColorSpace;
 
-const screenMaterial2 = new THREE.MeshBasicMaterial({
+const screenMaterial2 = new THREE.MeshStandardMaterial({
     map: videoTexture2,
+    roughness: 0.8,
+    metalness: 0.01,
     side: THREE.DoubleSide
 });
 
@@ -887,10 +962,13 @@ video3.pause();
 const videoTexture3 = new THREE.VideoTexture(video3);
 videoTexture3.colorSpace = THREE.SRGBColorSpace;
 
-// 3️⃣ material
-const screenMaterial3 = new THREE.MeshBasicMaterial({
-    map: videoTexture3
+const screenMaterial3 = new THREE.MeshStandardMaterial({
+    map: videoTexture3,
+    roughness: 0.2,
+    metalness: 0.4,
+    side: THREE.DoubleSide
 });
+
 
 const screen2 = new THREE.Mesh(screenGeometry, screenOffMaterial2);
 
@@ -915,8 +993,11 @@ const videoTexture4 = new THREE.VideoTexture(video4);
 videoTexture4.colorSpace = THREE.SRGBColorSpace;
 
 // 3️⃣ material
-const screenMaterial4 = new THREE.MeshBasicMaterial({
-    map: videoTexture4
+const screenMaterial4 = new THREE.MeshStandardMaterial({
+    map: videoTexture4,
+    roughness: 0.2,
+    metalness: 0.4,
+    side: THREE.DoubleSide
 });
 
 const screen3 = new THREE.Mesh(screenGeometry, screenOffMaterial3);
@@ -940,8 +1021,11 @@ const videoTexture5 = new THREE.VideoTexture(video5);
 videoTexture5.colorSpace = THREE.SRGBColorSpace;
 
 // 3️⃣ material
-const screenMaterial5 = new THREE.MeshBasicMaterial({
-    map: videoTexture5
+const screenMaterial5 = new THREE.MeshStandardMaterial({
+    map: videoTexture5,
+    roughness: 0.2,
+    metalness: 0.4,
+    side: THREE.DoubleSide
 });
 
 const screen4 = new THREE.Mesh(screenGeometry, screenOffMaterial4);
@@ -1657,8 +1741,6 @@ renderer.domElement.addEventListener('click', (event) => {
     
             }
         
-
-        
                 // Vérifier si c’est ton bouton rouge
         if (clickedObject.name.includes("Table_3_Button_Red_0")) {
             onButtonClick(); // Appelle la fonction de gestion du clic
@@ -1666,7 +1748,26 @@ renderer.domElement.addEventListener('click', (event) => {
             transittionsound.play();
         }
         
-        
+        const shipHit = raycaster.intersectObject(tiePlayer, true);
+
+        if (shipHit.length > 0) {
+            
+            tiechange.play();
+            // cacher le vaisseau actuel
+            ships[shipIndex].visible = false;
+
+            // passer au suivant
+            shipIndex++;
+            if (shipIndex >= ships.length) shipIndex = 0;
+
+            // afficher le suivant
+            ships[shipIndex].visible = true;
+
+            // mettre à jour le vaisseau actif
+            tiePlayer = ships[shipIndex];
+
+            console.log("Nouveau vaisseau :", shipIndex);
+        }
         
             
         const mouse = new THREE.Vector2();
@@ -1980,6 +2081,8 @@ function onButtonClick() {
 
 let envBlink = 0;
 let envToggle = false;
+let levitationClock = new THREE.Clock();
+let baseY = null; // pas encore défini
 
 // =========================================================================================
 // ANIMATION     ANIMATION        ANIMATION           ANIMATION           ANIMATION
@@ -2138,6 +2241,18 @@ else if (objectFade === "fadeIn") {
         );
 
     material.uniforms.uOpacity.value = hologramOpacity;
+    }
+
+    // ======= Levitation TIE PLAYER =====================
+
+    if (baseY === null) baseY = tiePlayer.position.y;
+
+    const t = levitationClock.getElapsedTime();
+
+    if (tiePlayer) {
+        // lévitation fluide : amplitude + vitesse ajustables
+        tiePlayer.position.y = baseY + Math.sin(t * 2) * 0.2;
+
     }
 
     updateinout();
