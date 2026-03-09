@@ -1972,9 +1972,12 @@ function onButtonClick() {
 
 
 
-// ==================
-// ANIMATION
-// ==================
+let envBlink = 0;
+let envToggle = false;
+
+// =========================================================================================
+// ANIMATION     ANIMATION        ANIMATION           ANIMATION           ANIMATION
+// =========================================================================================
 function animate(){
 
     requestAnimationFrame(animate);
