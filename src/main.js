@@ -71,6 +71,13 @@ let hyperscreen;
 let screenMaterial;
 let originalPositions = new Map();
 const hyperMoveDistance = 200;
+const hyperMoveDistance = 200;
+let mainHDRI;
+let alarmHDR;
+let rotationVelocity = 0;
+const rotationAcceleration = 0.2;
+const rotationDamping = 0.85;
+const maxRotationSpeed = 0.3;      // limite max rad/frame
 
 
 video = document.createElement("video");
@@ -126,6 +133,27 @@ scene.background = new THREE.Color(0x000000);
 camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.01, 1000);
 camera.position.set(0,0,0);
 camera.rotation.order = "YXZ";
+
+const hdrloader = new HDRLoader();
+
+hdrloader.load("studio.hdr", (texture) => {
+
+    const pmremGenerator = new THREE.PMREMGenerator(renderer);
+    mainHDRI = pmremGenerator.fromEquirectangular(texture).texture;
+
+    scene.environment = mainHDRI;
+
+    texture.dispose();
+    pmremGenerator.dispose();
+
+});
+
+hdrloader.load('public/studio2.hdr', function(texture) {
+
+    texture.mapping = THREE.EquirectangularReflectionMapping;
+    alarmHDR = texture;
+
+});
 
 // Renderer
 renderer = new THREE.WebGLRenderer({antialias:true});
@@ -1096,13 +1124,17 @@ function startAlarm() {
 }
 
 function stopAlarm() {
+
     alarmActive = false;
 
-    if (alarmSound.isPlaying) {
+    if (alarmSound && alarmSound.isPlaying) {
         alarmSound.stop();
     }
 
-    // Remise état normal
+    if (mainHDRI) {
+        scene.environment = mainHDRI;
+    }
+
     if (panelMesh) {
         const mat = panelMesh.material;
         mat.emissive.set(0xffffff);
@@ -2130,16 +2162,34 @@ else if (objectFade === "fadeIn") {
 
     if (alarmActive && panelMesh) {
 
-        blinkTime += dt * 5; // vitesse du clignotement
-
+        blinkTime += dt * 2.805;
+        envBlink += dt * 2.805;
+    
         const mat = panelMesh.material;
-
-        // oscillation fluide 0 → 1
+    
         const pulse = (Math.sin(blinkTime) + 1) / 2;
-
+    
         mat.emissive.set(0xff0000);
-        mat.emissiveIntensity = 1 + pulse * 4; 
-        // intensité entre 1 et 5
+        mat.emissiveIntensity = 1 + pulse * 4;
+        
+        // exposition synchronisée
+        renderer.toneMappingExposure = 0.3 + pulse * 0.6;
+        
+        
+        // SWITCH HDR synchronisé avec le pulse
+        const newToggle = pulse > 0.5;
+        
+        if (newToggle !== envToggle) {
+        
+            envToggle = newToggle;
+        
+            scene.environment = envToggle ? alarmHDR : mainHDRI;
+    }}
+    
+    if (!alarmActive) {
+    
+        scene.environment = mainHDRI;
+        renderer.toneMappingExposure = 0.3;
     }
 
     if (cockpit && !isInsideShip) {
