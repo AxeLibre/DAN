@@ -742,6 +742,7 @@ gltfLoader.load('public/tieplayer.glb', (gltf) => {
     scene.add(tiePlayer);
     tieLoaded = true;
     checkGameReady();
+    addShip(tiePlayer1);
 });
 
 gltfLoader.load('public/tiefighter.glb', (gltf) => {
