@@ -71,7 +71,6 @@ let hyperscreen;
 let screenMaterial;
 let originalPositions = new Map();
 const hyperMoveDistance = 200;
-const hyperMoveDistance = 200;
 let mainHDRI;
 let alarmHDR;
 let rotationVelocity = 0;
