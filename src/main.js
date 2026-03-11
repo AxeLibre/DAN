@@ -1170,7 +1170,7 @@ audioLoader.load('public/laser.mp3', (buffer) => {
 
 let laserCannon;
 
-gltfLoader.load("laser_cannon.glb", (gltf) => {
+gltfLoader.load('public/laser_cannon.glb', (gltf) => {
 
     laserCannon = gltf.scene;
     laserCannon.visible = false;
