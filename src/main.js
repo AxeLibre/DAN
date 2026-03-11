@@ -84,6 +84,18 @@ let tiefighter;
 let tieinterceptor;
 let tiesilencer;
 let tiechange; 
+let cannonActive = false;
+let lasers = [];
+let laseron;
+let laseroff;
+let cannonTargetY = -20;
+let cannonHiddenY = -20;
+let cannonVisibleY = 0;
+let cannonSpeed = 0.5;
+
+
+
+
 
 video = document.createElement("video");
 video.src = "public/hyperscreen.mp4";
@@ -303,6 +315,23 @@ audioLoader2.load('public/tiechange.WAV', function(buffer) {
     tiechange.setLoop(false);   
     tiechange.setVolume(1.0);  
 });
+
+laseron = new THREE.Audio(listener);
+
+audioLoader2.load('public/laseron.mp3', function(buffer) {
+    laseron.setBuffer(buffer);
+    laseron.setLoop(false);   
+    laseron.setVolume(2.0);  
+});
+
+laseroff = new THREE.Audio(listener);
+
+audioLoader2.load('public/laseroff.mp3', function(buffer) {
+    laseroff.setBuffer(buffer);
+    laseroff.setLoop(false);   
+    laseroff.setVolume(2.0);  
+});
+
 
 // 🎧 Listener
 const listener4 = new THREE.AudioListener();
@@ -1101,7 +1130,7 @@ const clickableObjects = [screen,screen2,screen3,screen4];
 // ==========================================================
 // LASER
 // ==========================================================
-
+/*
 // 🔥 LASER GLB
 const laserLoader = new GLTFLoader(loadingManager);
 
@@ -1122,7 +1151,7 @@ laserLoader.load('public/laser.glb', (gltf) => {
     laserAction.setLoop(THREE.LoopOnce);
     laserAction.clampWhenFinished = true;
 });
-
+*/
 // 🔊 LASER SOUND (utilise le listener global)
 const listener = new THREE.AudioListener();
 camera.add(listener);
@@ -1134,6 +1163,121 @@ audioLoader.load('public/laser.mp3', (buffer) => {
     laserSound.setBuffer(buffer);
     laserSound.setVolume(1);
 });
+
+// =================================================================
+// Nouveau LASER 
+// =================================================================
+
+let laserCannon;
+
+gltfLoader.load("laser_cannon.glb", (gltf) => {
+
+    laserCannon = gltf.scene;
+    laserCannon.visible = false;
+    laserCannon.position.set(0,-20,160);
+    laserCannon.rotation.y += Math.PI;
+
+
+
+    scene.add(laserCannon);
+
+});
+//-----------------------------------
+
+const aimPlane = new THREE.Plane(
+    new THREE.Vector3(0,0,1),
+    -200
+);
+
+//--------------------------------------
+function shootLaser() {
+    if (!laserCannon) return;
+
+    const geometry = new THREE.CylinderGeometry(1, 1, 20);
+    const material = new THREE.MeshStandardMaterial({
+        color: 0xff0000,
+        emissive: 0xff0000,
+        emissiveIntensity: 5
+    });
+    const laser = new THREE.Mesh(geometry, material);
+    // cylindre vertical par défaut → on l’aligne
+
+
+    laserCannon.updateMatrixWorld();
+    laser.position.setFromMatrixPosition(laserCannon.matrixWorld);
+    
+
+    // direction vers l’avant du canon
+    const aimPoint = new THREE.Vector3();
+    aimPoint.copy(laserCannon.position)
+            .add(laserCannon.getWorldDirection(new THREE.Vector3()).multiplyScalar(1000));
+
+    const direction = new THREE.Vector3().subVectors(aimPoint, laser.position).normalize();
+    laser.userData.velocity = direction.clone().multiplyScalar(20);
+
+    // aligner le laser sur sa trajectoire
+    laser.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0), direction);
+
+    // glow
+    const glowGeometry = new THREE.CylinderGeometry(2, 2, 20);
+
+    const glowMaterial = new THREE.MeshBasicMaterial({
+        color: 0xff5555,
+        transparent: true,
+        opacity: 0.35,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false
+    });
+
+    const glow = new THREE.Mesh(glowGeometry, glowMaterial);
+
+    laser.add(glow);
+
+    // Glow à la pointe du laser
+
+    const spriteMaterial = new THREE.SpriteMaterial({
+        color: 0xff4444,
+        transparent: true,
+        opacity: 0.9,
+        blending: THREE.AdditiveBlending
+    });
+
+    const glowSprite = new THREE.Sprite(spriteMaterial);
+    glowSprite.scale.set(4, 4, 4);
+
+    glowSprite.position.y = 10;
+
+    laser.add(glowSprite);
+
+    // sprite au centre du laser
+
+    const coreGeometry = new THREE.CylinderGeometry(0.4,0.4,20);
+
+    const coreMaterial = new THREE.MeshBasicMaterial({
+        color: 0xffffff,
+        transparent: true,
+        opacity: 0.9,
+        blending: THREE.AdditiveBlending,
+        depthWrite:false
+    });
+
+    const core = new THREE.Mesh(coreGeometry, coreMaterial);
+
+    laser.add(core);
+
+    scene.add(laser);
+    lasers.push(laser);
+
+    const flash = new THREE.PointLight(0xff4444, 15, 40);
+    flash.position.setFromMatrixPosition(laserCannon.matrixWorld);
+    scene.add(flash);
+
+    setTimeout(()=>scene.remove(flash), 50);
+}
+
+
+
+
 
 // =========================================================
 // ALARM     ALARM        ALARM
@@ -1596,6 +1740,21 @@ renderer.domElement.addEventListener('click', (event) => {
         -((event.clientY - rect.top) / rect.height) * 2 + 1
     );
 
+    if (cannonActive && !ignoreNextShot) {
+
+        setTimeout(() => {
+
+            if (!cannonActive) return; // sécurité si le canon vient d'être éteint
+
+            laserSound.stop();
+            shootLaser();
+            laserSound.play();
+
+        }, 80); // petit délai
+
+    }
+
+
     raycaster.setFromCamera(mouse, camera);
 
     const intersects = raycaster.intersectObjects(worldGroup.children, true);
@@ -1676,27 +1835,30 @@ renderer.domElement.addEventListener('click', (event) => {
 
         if (clickedObject.name.includes("Side_Control_Panels_Button_White_0001")) {
 
-            if (laserAction) {
+            ignoreNextShot = true;
 
-                laserAction.reset();
-                laserAction.play();
+            cannonActive = !cannonActive;
 
-                if (laserSound.isPlaying) laserSound.stop();
-                laserSound.play();
+            setTimeout(() => {
+                ignoreNextShot = false;
+            }, 100);
+
+            if (cannonActive) {
+
+                laserCannon.visible = true;
+                cannonTargetY = cannonVisibleY;
+                laseron.play();
+
+            } else {
+
+                cannonTargetY = cannonHiddenY;
+                laseroff.play();
+
             }
+
         }
 
-        if (clickedObject.name.includes("Front_Control_Panels_Button_White_0")) {
-
-            if (laserAction) {
-
-                laserAction.reset();
-                laserAction.play();
-
-                if (laserSound.isPlaying) laserSound.stop();
-                laserSound.play();
-            }
-        }
+        
 
         if (clickedObject.name.includes("Front_Control_Panels_Button_Red_0")) {
 
@@ -2002,6 +2164,7 @@ function exitShip() {
     if (tiePlayer) tiePlayer.visible = false;
     if (sdt) sdt.visible = true;
     if (cockpit) cockpit.visible = true;
+    if (star_destroyer0) star_destroyer0.visible = false;
 
     switchToFlightAudio();
 
@@ -2016,6 +2179,7 @@ function enterShip() {
     if (tiePlayer) tiePlayer.visible = true;
     if (sdt) sdt.visible = false;
     if (cockpit) cockpit.visible = false;
+    if (star_destroyer0) star_destroyer0.visible = true;
 
     switchToShipAudio();
 
@@ -2257,17 +2421,55 @@ else if (objectFade === "fadeIn") {
 
     updateinout();
 
-
-    if (laserMixer) {
-        laserMixer.update(dt);
-    };
-
     if (tielaserMixer) {
         tielaserMixer.update(dt);
     };
 
-    // si tu as d'autres mixers
-    if (laserMixer) laserMixer.update(dt);
+    if (cannonActive && laserCannon) {
+
+    raycaster.setFromCamera(mouse, camera);
+
+    const target = new THREE.Vector3();
+
+    target.copy(raycaster.ray.direction)
+          .multiplyScalar(500)
+          .add(raycaster.ray.origin);
+
+    laserCannon.lookAt(target);
+
+    }
+
+    lasers.forEach((laser, i) => {
+
+    laser.position.add(laser.userData.velocity);
+
+    if (laser.position.length() > 3000) {
+
+        scene.remove(laser);
+        lasers.splice(i,1);
+
+    }
+
+    });
+
+    if (laserCannon) {
+
+        if (laserCannon.position.y < cannonTargetY) {
+            laserCannon.position.y += cannonSpeed;
+        }
+
+        if (laserCannon.position.y > cannonTargetY) {
+            laserCannon.position.y -= cannonSpeed;
+        }
+
+        // cacher seulement quand il est complètement descendu
+        if (!cannonActive && laserCannon.position.y <= cannonHiddenY + 0.1) {
+            laserCannon.visible = false;
+        }
+
+    }
+
+    
 
 
 
