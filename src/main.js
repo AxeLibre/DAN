@@ -2018,9 +2018,13 @@ window.addEventListener('resize',()=>{
     let mouseX = 0;
     let mouseY = 0;
 
-document.addEventListener('mousemove', (event) => {
-  mouseX = (event.clientX / window.innerWidth) * 2 - 1;
-  mouseY = -(event.clientY / window.innerHeight) * 2 + 1;
+renderer.domElement.addEventListener("mousemove", (event) => {
+
+    const rect = renderer.domElement.getBoundingClientRect();
+
+    mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+    mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
 });
 
 
