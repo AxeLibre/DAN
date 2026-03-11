@@ -92,6 +92,7 @@ let cannonTargetY = -20;
 let cannonHiddenY = -20;
 let cannonVisibleY = 0;
 let cannonSpeed = 0.5;
+let ignoreNextShot = false;
 
 
 
