@@ -316,7 +316,7 @@ audioLoader2.load('public/tiechange.WAV', function(buffer) {
     tiechange.setVolume(1.0);  
 });
 
-laseron = new THREE.Audio(listener);
+laseron = new THREE.Audio(listener3);
 
 audioLoader2.load('public/laseron.mp3', function(buffer) {
     laseron.setBuffer(buffer);
@@ -324,7 +324,7 @@ audioLoader2.load('public/laseron.mp3', function(buffer) {
     laseron.setVolume(2.0);  
 });
 
-laseroff = new THREE.Audio(listener);
+laseroff = new THREE.Audio(listener3);
 
 audioLoader2.load('public/laseroff.mp3', function(buffer) {
     laseroff.setBuffer(buffer);
