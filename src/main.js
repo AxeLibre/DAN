@@ -93,6 +93,17 @@ let cannonHiddenY = -20;
 let cannonVisibleY = 0;
 let cannonSpeed = 0.5;
 let ignoreNextShot = false;
+let enemies = [];           // X-Wing (ennemis)
+let friendlyShips = [];     // TIE (amis)
+let tieModel = null;        // Modèle TIE
+let xwingModel = null;      // Modèle X-Wing
+let enemyLasers = [];       // Lasers rouges (X-Wing)
+let friendlyLasers = [];    // Lasers verts (TIE)
+let explosions = [];                    // Explosions vidéo
+// Rendre les fonctions d'explosion globales
+window.createStandardExplosion = createStandardExplosion;
+window.createSparkParticles = createSparkParticles;
+window.createRingExplosionComplete = createRingExplosionComplete;
 
 
 
@@ -1418,6 +1429,1561 @@ function handleSpaceAction() {
     }
 }
 
+
+
+// ===================================================================
+// VAISSEAUX ENNEMIS - VERSION AMÉLIORÉE
+// ===================================================================
+
+// X-WING
+
+const mothershipPosition = new THREE.Vector3(0,0,0);
+const safeRadius = 200;
+
+// Paramètres de mouvement améliorés
+const MOVEMENT = {
+    BASE_SPEED: 30,
+    WANDER_STRENGTH: 0.5,
+    FORMATION_STRENGTH: 0.3,
+    AVOIDANCE_RADIUS: 40,
+    TURN_SPEED: 2.0,
+    WAVE_FREQUENCY: 0.8,
+    MAX_SPEED: 100,
+    MIN_SPEED: 30
+};
+
+gltfLoader.load("xwing.glb", (gltf) => {
+    xwingModel = gltf.scene;
+    xwingModel.visible = true;
+    xwingModel.scale.set(5,5,5);
+    xwingModel.position.set(0,0,0);
+    xwingModel.rotation.y += Math.PI;
+
+    // Créer les X-Wing mais les cacher
+    for(let i=0; i<10; i++){
+        spawnSquadron(5);
+    }
+    
+    // Les cacher immédiatement après création
+    enemies.forEach(enemy => {
+        enemy.visible = false;
+    });
+
+
+    // FORCER UNE PREMIÈRE MISE À JOUR POUR LANCER L'ANIMATION
+    if (enemies.length > 0) {
+        // Simuler 5 secondes d'animation d'un coup
+        for(let i = 0; i < 50; i++) {
+            updateEnemies(0.1); // 50 * 0.1 = 5 secondes
+        }
+        console.log("Animation avancée de 5 secondes");
+    }
+});
+
+const boxSize = 400;
+
+function updateEnemies(dt) {
+    // 1. TOUJOURS mettre à jour la physique, même si invisible
+    enemies.forEach((enemy, index) => {
+        if (!enemy) return;
+        
+        const vel = enemy.userData.velocity;
+        
+        // 2. FORCER LA DIRECTION VERS LE VAISSEAU MÈRE (Z négatif)
+        vel.z = -35;
+        
+        // 3. MOUVEMENT EN BOUCLES
+        const time = performance.now() * 0.001;
+        const loopPhase = time * 0.5 + index;
+        const radius = 120;
+        
+        const targetX = Math.sin(loopPhase) * radius + Math.sin(time * 0.2 + index) * 150;
+        const targetY = Math.cos(loopPhase * 0.7) * radius + Math.cos(time * 0.3 + index) * 80;
+        
+        vel.x += (targetX - enemy.position.x) * 0.02 * dt * 30;
+        vel.y += (targetY - enemy.position.y) * 0.02 * dt * 30;
+        
+        // 4. APPLICATION DU MOUVEMENT
+        const newPosition = enemy.position.clone().addScaledVector(vel, dt);
+        
+        // 5. GESTION DE LA DISTANCE
+        if (newPosition.z < 100) {
+            newPosition.z = 900 + Math.random() * 300;
+            newPosition.x = (Math.random() - 0.5) * 600;
+            newPosition.y = (Math.random() - 0.5) * 200;
+            
+            vel.x = (Math.random() - 0.5) * 8;
+            vel.y = (Math.random() - 0.5) * 4;
+        }
+        
+        // 6. LIMITES LATÉRALES
+        if (Math.abs(newPosition.x) > 700) {
+            newPosition.x = Math.sign(newPosition.x) * 700;
+            vel.x *= -0.3;
+        }
+        if (Math.abs(newPosition.y) > 250) {
+            newPosition.y = Math.sign(newPosition.y) * 250;
+            vel.y *= -0.3;
+        }
+        
+        enemy.position.copy(newPosition);
+        
+        // 7. ORIENTATION (toujours basée sur la vélocité)
+        if (vel.length() > 0.1) {
+            const lookDir = vel.clone().normalize();
+            
+            if (!enemy.userData.targetQuat) {
+                enemy.userData.targetQuat = new THREE.Quaternion();
+            }
+            
+            const newTargetQuat = new THREE.Quaternion();
+            newTargetQuat.setFromUnitVectors(
+                new THREE.Vector3(0, 0, -1),
+                lookDir
+            );
+            
+            enemy.userData.targetQuat.slerp(newTargetQuat, 0.05);
+            enemy.quaternion.slerp(enemy.userData.targetQuat, 0.03);
+        }
+    });
+    
+    // 8. GÉRER LA VISIBILITÉ SÉPARÉMENT
+    enemies.forEach(enemy => {
+        if (enemy) enemy.visible = cannonActive;
+    });
+}
+
+
+// ===================================================================
+// FONCTION DE SPAWN CORRIGÉE POUR X-WING
+// ===================================================================
+
+function spawnEnemy() {
+    if(!xwingModel) return;
+
+    let enemy = new THREE.Group();
+    let model = xwingModel.clone();
+    
+    // Orientation initiale vers le centre
+    model.rotation.y = 0;
+    enemy.add(model);
+
+    // Arrivée depuis les 4 directions (N, S, E, O)
+    const directions = [
+        { x: 1, z: 0 },   // Est
+        { x: -1, z: 0 },  // Ouest
+        { x: 0, z: 1 },   // Nord (devant)
+        { x: 0, z: -1 }   // Sud (derrière)
+    ];
+    
+    const dir = directions[Math.floor(Math.random() * directions.length)];
+    
+    // Position de spawn éloignée
+    enemy.position.set(
+        dir.x * (1000 + Math.random() * 400),
+        (Math.random() - 0.5) * 300,
+        dir.z * (1000 + Math.random() * 400)
+    );
+
+    // Cibler une zone autour du joueur
+    const targetZone = new THREE.Vector3(
+        (Math.random() - 0.5) * 400,
+        (Math.random() - 0.5) * 200,
+        (Math.random() - 0.5) * 300
+    );
+    
+    const direction = targetZone.clone().sub(enemy.position).normalize();
+    const speed = 30 + Math.random() * 20;
+    
+    const now = performance.now() * 0.001;
+    
+    enemy.userData = {
+        velocity: direction.multiplyScalar(speed),
+        targetQuat: null,
+        nextShot: now + 1 + Math.random() * 3,
+        fireRate: 1.5 + Math.random() * 2.5,
+        nextRandomExplosion: now + 5 + Math.random() * 10,
+        lastRandomExplosion: 0,
+        spawnTime: now,
+        targetZone: targetZone
+    };
+
+   
+    scene.add(enemy);
+    enemies.push(enemy);
+}
+
+
+function spawnSquadron(count = 8) {
+    const baseZ = 300 + Math.random() * 200;
+    const baseY = (Math.random() - 0.5) * 150;
+    
+    for(let i = 0; i < count; i++) {
+        let enemy = new THREE.Group();
+        let model = xwingModel.clone();
+        model.rotation.y = Math.PI;
+        enemy.add(model);
+
+        const angle = (i / count) * Math.PI * 2;
+        
+        enemy.position.set(
+            Math.cos(angle) * 200 + (Math.random() - 0.5) * 80,
+            Math.sin(angle) * 80 + baseY,
+            baseZ + (Math.random() - 0.5) * 150
+        );
+
+
+
+        const vel = new THREE.Vector3(
+            (Math.random() - 0.5) * 10,
+            (Math.random() - 0.5) * 5,
+            25 + Math.random() * 18
+        );
+
+        enemy.userData = {
+            velocity: vel,
+            targetQuat: null
+        };
+
+        scene.add(enemy);
+        enemies.push(enemy);
+    }
+}
+
+function checkEnemiesPosition() {
+    enemies.forEach(enemy => {
+        if (enemy.position.z < 150) { // MODIFIÉ : 50 → 150
+            enemy.userData.velocity.z += 3; // Poussée plus douce
+        }
+        if (enemy.position.z > 600) { // NOUVEAU : limite supérieure
+            enemy.userData.velocity.z -= 3;
+        }
+    });
+}
+
+// Appeler checkEnemiesPosition toutes les 3 secondes au lieu de l'intervalle de téléportation
+setInterval(checkEnemiesPosition, 3000);
+
+// ===================================================================
+// SYSTÈME D'EXPLOSIONS - TAILLE CORRIGÉE + ANNEAU PARFAIT
+// ===================================================================
+
+// -------------------------------------------------------------------
+// 1. CONFIGURATION VIDÉO
+// -------------------------------------------------------------------
+const videoex = document.createElement("video");
+videoex.src = "explosion.mp4";
+videoex.loop = false;
+videoex.muted = true;
+videoex.playsInline = true;
+
+const videoTextureex = new THREE.VideoTexture(videoex);
+videoTextureex.minFilter = THREE.LinearFilter;
+videoTextureex.magFilter = THREE.LinearFilter;
+videoTextureex.format = THREE.RGBAFormat;
+
+// -------------------------------------------------------------------
+// 2. STOCKAGE DES PARTICULES D'EXPLOSION
+// -------------------------------------------------------------------
+let explosionParticleSystems = [];
+
+// -------------------------------------------------------------------
+// 3. FONCTIONS DE BASE
+// -------------------------------------------------------------------
+
+/**
+ * Crée une explosion vidéo seule - TAILLE RÉDUITE
+ */
+function createVideoExplosion(position, scale = 8) { // 20 → 8
+    const geometry = new THREE.PlaneGeometry(scale, scale);
+    const material = new THREE.MeshBasicMaterial({
+        map: videoTextureex,
+        transparent: true,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        side: THREE.DoubleSide
+    });
+
+    const plane = new THREE.Mesh(geometry, material);
+    plane.position.copy(position);
+    plane.scale.set(2.5, 2.5, 2.5); // 6 → 2.5
+    
+    plane.userData = { 
+        life: 1.5,
+        type: 'video',
+        initialScale: 3.5
+    };
+
+    scene.add(plane);
+    explosions.push(plane);
+
+    videoex.currentTime = 0;
+    videoex.play();
+    
+    return plane;
+}
+
+/**
+ * Crée des particules d'explosion - TAILLE RÉDUITE
+ */
+function createExplosionParticles(position, options = {}) {
+    const {
+        count = 100, // 60 → 40
+        speed = 20, // 120 → 80
+        life = 2.5 // 1.5 → 1.2
+    } = options;
+
+    const geometry = new THREE.BufferGeometry();
+    
+    const positions = new Float32Array(count * 3);
+    const targets = new Float32Array(count * 3);
+    const seeds = new Float32Array(count);
+    const velocities = [];
+    
+    for (let i = 0; i < count; i++) {
+        positions[i*3] = position.x;
+        positions[i*3+1] = position.y;
+        positions[i*3+2] = position.z;
+        
+        const theta = Math.random() * Math.PI * 2;
+        const phi = Math.acos(2 * Math.random() - 1);
+        const speed_i = speed * (0.7 + Math.random() * 0.6);
+        
+        const velocity = new THREE.Vector3(
+            Math.sin(phi) * Math.cos(theta) * speed_i,
+            Math.sin(phi) * Math.sin(theta) * speed_i,
+            Math.cos(phi) * speed_i
+        );
+        velocities.push(velocity);
+        
+        targets[i*3] = position.x + velocity.x * 1.5;
+        targets[i*3+1] = position.y + velocity.y * 1.5;
+        targets[i*3+2] = position.z + velocity.z * 1.5;
+        
+        seeds[i] = Math.random();
+    }
+    
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geometry.setAttribute('target', new THREE.BufferAttribute(targets, 3));
+    geometry.setAttribute('seed', new THREE.BufferAttribute(seeds, 1));
+    
+    const material = new THREE.ShaderMaterial({
+        transparent: true,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+        
+        uniforms: {
+            morph: { value: 0 },
+            time: { value: 0 },
+            globalRotation: { value: 0 },
+            uOpacity: { value: 1 },
+            uBrightness: { value: 5.0 }
+        },
+        
+        vertexShader: `
+            precision mediump float;
+            attribute vec3 target;
+            attribute float seed;
+            uniform float morph;
+            uniform float time;
+            uniform float globalRotation;
+            
+            mat3 rotationY(float angle){
+                float s = sin(angle);
+                float c = cos(angle);
+                return mat3(
+                    c, 0.0, -s,
+                    0.0, 1.0, 0.0,
+                    s, 0.0,  c
+                );
+            }
+            
+            void main(){
+                vec3 pos = mix(position, target, morph);
+                
+                float a = seed * 6.283185 + time * 3.0;
+                pos += vec3(
+                    cos(a) * 0.05,
+                    sin(a * 1.3) * 0.05,
+                    sin(a * 0.7) * 0.05
+                );
+                
+                pos = rotationY(globalRotation) * pos;
+                
+                vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
+                gl_Position = projectionMatrix * mvPosition;
+                
+                // Taille réduite
+                float perspective = 1.0 / max(0.1, -mvPosition.z);
+                float size = 15.0 * perspective * (1.0 - morph * 0.3); // 35 → 15
+                gl_PointSize = clamp(size, 4.0, 12.0); // 8-25 → 4-12
+            }
+        `,
+        
+        fragmentShader: `
+            precision mediump float;
+            uniform float time;
+            uniform float uOpacity;
+            uniform float uBrightness;
+            
+            void main(){
+                vec2 uv = gl_PointCoord - 0.5;
+                float d = length(uv);
+                
+                float core = exp(-d*d*40.0) * 2.0;
+                float ring = exp(-d*d*12.0) * 1.5;
+                float halo = exp(-d*d*3.0) * 0.8;
+                
+                vec3 color1 = vec3(1.5, 1.2, 0.5);
+                vec3 color2 = vec3(1.8, 0.8, 0.2);
+                vec3 color3 = vec3(2.0, 0.5, 0.1);
+                
+                vec3 color = 
+                    color1 * core +
+                    color2 * ring +
+                    color3 * halo;
+                
+                float flicker = 0.8 + 0.4 * sin(uv.x * 10.0 + time * 20.0) * sin(uv.y * 10.0);
+                color *= flicker;
+                color *= uBrightness;
+                
+                float alpha = (halo * 0.5 + core * 0.3) * uOpacity * 1.2;
+                gl_FragColor = vec4(color, alpha);
+            }
+        `
+    });
+    
+    const particleSystem = new THREE.Points(geometry, material);
+    particleSystem.position.set(0, 0, 0);
+    
+    particleSystem.userData = {
+        life: life,
+        maxLife: life,
+        velocities: velocities,
+        count: count,
+        type: 'explosion'
+    };
+    
+    scene.add(particleSystem);
+    explosionParticleSystems.push(particleSystem);
+    
+    return particleSystem;
+}
+
+/**
+ * Crée un anneau de particules PARFAIT (qui grandit sans se déformer)
+ */
+function createRingExplosion(position) {
+    const count = 100;
+    const geometry = new THREE.BufferGeometry();
+    
+    const positions = new Float32Array(count * 3);
+    const seeds = new Float32Array(count);
+    const startRadius = 2; // Rayon de départ très petit
+    const endRadius = 30;   // Rayon final
+    
+    // On ne met pas de targets car on va contrôler l'expansion manuellement
+    for (let i = 0; i < count; i++) {
+        const angle = (i / count) * Math.PI * 2;
+        
+        // Position initiale : petit cercle
+        positions[i*3] = position.x + Math.cos(angle) * startRadius;
+        positions[i*3+1] = position.y;
+        positions[i*3+2] = position.z + Math.sin(angle) * startRadius;
+        
+        seeds[i] = Math.random();
+    }
+    
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geometry.setAttribute('seed', new THREE.BufferAttribute(seeds, 1));
+    
+    const material = new THREE.ShaderMaterial({
+        transparent: true,
+        blending: THREE.AdditiveBlending,
+        
+        uniforms: {
+            time: { value: 0 },
+            uOpacity: { value: 1 },
+            uBrightness: { value: 5.0 },
+            uRadius: { value: startRadius },
+            uCenter: { value: position }
+        },
+        
+        vertexShader: `
+            precision mediump float;
+            attribute float seed;
+            uniform float time;
+            uniform float uRadius;
+            uniform vec3 uCenter;
+            
+            void main(){
+                // On garde la position relative au centre
+                vec3 relativePos = position - uCenter;
+                
+                // Normaliser pour avoir une direction parfaite
+                vec3 dir = normalize(relativePos);
+                
+                // Nouvelle position = centre + direction * rayon
+                vec3 pos = uCenter + dir * uRadius;
+                
+                // Micro vibrations
+                float a = seed * 6.283185 + time * 2.0;
+                pos += vec3(cos(a), sin(a), cos(a)) * 0.1;
+                
+                vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
+                gl_Position = projectionMatrix * mvPosition;
+                
+                float perspective = 1.0 / max(0.1, -mvPosition.z);
+                float size = 12.0 * perspective; // Taille constante
+                gl_PointSize = clamp(size, 3.0, 8.0);
+            }
+        `,
+        
+        fragmentShader: `
+            precision mediump float;
+            uniform float uOpacity;
+            uniform float uBrightness;
+            
+            void main(){
+                vec2 uv = gl_PointCoord - 0.5;
+                float d = length(uv);
+                float core = exp(-d*d*25.0);
+                float glow = exp(-d*d*8.0) * 0.5;
+                vec3 color = vec3(1.0, 0.8, 0.4) * uBrightness;
+                float alpha = (core + glow) * uOpacity;
+                gl_FragColor = vec4(color, alpha);
+            }
+        `
+    });
+    
+    const ringSystem = new THREE.Points(geometry, material);
+    ringSystem.userData = {
+        life: 1.0,
+        maxLife: 1.0,
+        startRadius: startRadius,
+        endRadius: endRadius,
+        type: 'ring',
+        center: position.clone()
+    };
+    
+    scene.add(ringSystem);
+    explosionParticleSystems.push(ringSystem);
+}
+
+/**
+ * Crée des étincelles rapides - TAILLE RÉDUITE
+ */
+function createSparkParticles(position, count = 15) { // 30 → 15
+    const geometry = new THREE.BufferGeometry();
+    
+    const positions = new Float32Array(count * 3);
+    const targets = new Float32Array(count * 3);
+    const seeds = new Float32Array(count);
+    const velocities = [];
+    
+    for (let i = 0; i < count; i++) {
+        positions[i*3] = position.x;
+        positions[i*3+1] = position.y;
+        positions[i*3+2] = position.z;
+        
+        const angle1 = Math.random() * Math.PI * 2;
+        const angle2 = Math.random() * Math.PI * 2;
+        const speed = 150 + Math.random() * 200; // 200-500 → 150-350
+        
+        const velocity = new THREE.Vector3(
+            Math.sin(angle1) * Math.cos(angle2) * speed,
+            Math.sin(angle1) * Math.sin(angle2) * speed,
+            Math.cos(angle1) * speed
+        );
+        velocities.push(velocity);
+        
+        targets[i*3] = position.x + velocity.x;
+        targets[i*3+1] = position.y + velocity.y;
+        targets[i*3+2] = position.z + velocity.z;
+        
+        seeds[i] = Math.random();
+    }
+    
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geometry.setAttribute('target', new THREE.BufferAttribute(targets, 3));
+    geometry.setAttribute('seed', new THREE.BufferAttribute(seeds, 1));
+    
+    const material = new THREE.ShaderMaterial({
+        transparent: true,
+        blending: THREE.AdditiveBlending,
+        
+        uniforms: {
+            morph: { value: 0 },
+            time: { value: 0 },
+            uOpacity: { value: 1 },
+            uBrightness: { value: 5 }
+        },
+        
+        vertexShader: `
+            precision mediump float;
+            attribute vec3 target;
+            attribute float seed;
+            uniform float morph;
+            uniform float time;
+            
+            void main(){
+                vec3 pos = mix(position, target, morph);
+                
+                float a = seed * 6.283185 + time * 5.0;
+                pos += vec3(cos(a), sin(a), cos(a)) * 0.05;
+                
+                vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
+                gl_Position = projectionMatrix * mvPosition;
+                
+                float perspective = 1.0 / -mvPosition.z;
+                gl_PointSize = clamp(8.0 * perspective * (1.0 - morph), 2.0, 5.0); // 15 → 8
+            }
+        `,
+        
+        fragmentShader: `
+            precision mediump float;
+            uniform float uOpacity;
+            uniform float uBrightness;
+            
+            void main(){
+                vec2 uv = gl_PointCoord - 0.5;
+                float d = length(uv);
+                float core = exp(-d*d*30.0);
+                gl_FragColor = vec4(vec3(1.0, 0.9, 0.5) * uBrightness, core * uOpacity);
+            }
+        `
+    });
+    
+    const sparkSystem = new THREE.Points(geometry, material);
+    sparkSystem.userData = {
+        life: 0.5, // 0.6 → 0.5
+        maxLife: 0.5,
+        velocities: velocities,
+        count: count,
+        type: 'sparks'
+    };
+    
+    scene.add(sparkSystem);
+    explosionParticleSystems.push(sparkSystem);
+}
+
+// -------------------------------------------------------------------
+// 4. PRÉSÉLECTIONS D'EXPLOSIONS
+// -------------------------------------------------------------------
+
+function createStandardExplosion(position, scale = 10) { // 20 → 10
+    createVideoExplosion(position, scale);
+    createExplosionParticles(position, { 
+        count: 35, // 70 → 35
+        speed: 70, // 150 → 70
+        life: 1.2 
+    });
+    createSparkParticles(position, 12); // 25 → 12
+}
+
+function createRingExplosionComplete(position, scale = 12) { // 20 → 12
+    createVideoExplosion(position, scale);
+    createExplosionParticles(position, { 
+        count: 25, // 50 → 25
+        speed: 60,
+        life: 1.2 
+    });
+    createRingExplosion(position);
+    createSparkParticles(position, 8); // 20 → 8
+}
+
+// -------------------------------------------------------------------
+// 5. MISE À JOUR DES PARTICULES
+// -------------------------------------------------------------------
+
+function updateExplosionParticles(dt) {
+    explosionParticleSystems = explosionParticleSystems.filter(system => {
+        const data = system.userData;
+        
+        if (data.type === 'ring') {
+            // Anneau : expansion parfaite
+            const progress = 1 - (data.life / data.maxLife);
+            const currentRadius = data.startRadius + (data.endRadius - data.startRadius) * progress;
+            
+            system.material.uniforms.uRadius.value = currentRadius;
+            system.material.uniforms.uOpacity.value = data.life / data.maxLife;
+            system.material.uniforms.time.value += dt * 2;
+            
+        } else {
+            // Autres particules
+            if (system.material.uniforms.morph) {
+                const morphProgress = 1 - (data.life / data.maxLife);
+                system.material.uniforms.morph.value = morphProgress;
+            }
+            
+            system.material.uniforms.uOpacity.value = data.life / data.maxLife;
+            
+            if (system.material.uniforms.time) {
+                system.material.uniforms.time.value += dt * 3;
+            }
+            
+            // Animation manuelle des positions
+            if (data.velocities) {
+                const positions = system.geometry.attributes.position.array;
+                for (let i = 0; i < data.count; i++) {
+                    const v = data.velocities[i];
+                    positions[i*3] += v.x * dt;
+                    positions[i*3+1] += v.y * dt;
+                    positions[i*3+2] += v.z * dt;
+                    v.multiplyScalar(0.97);
+                }
+                system.geometry.attributes.position.needsUpdate = true;
+            }
+        }
+        
+        data.life -= dt;
+        
+        if (data.life <= 0) {
+            scene.remove(system);
+            return false;
+        }
+        return true;
+    });
+}
+
+function updateExplosions(dt) {
+    // Mise à jour des explosions vidéo
+    explosions = explosions.filter(exp => {
+        if (exp.userData.type === 'video') {
+            exp.lookAt(camera.position);
+            
+            const progress = 1 - exp.material.opacity;
+            const scale = exp.userData.initialScale * (1 + progress * 1.5); // 2.5 → 1.5
+            exp.scale.set(scale, scale, scale);
+            
+            exp.material.opacity -= 1.2 * dt;
+            
+            if (exp.material.opacity <= 0) {
+                scene.remove(exp);
+                return false;
+            }
+        }
+        return true;
+    });
+    
+    updateExplosionParticles(dt);
+}
+
+// -------------------------------------------------------------------
+// 6. FONCTIONS DE DESTRUCTION
+// -------------------------------------------------------------------
+
+function destroyEnemy(enemy) {
+    if (!enemy || !enemy.visible) return;
+    
+    const pos = enemy.position.clone();
+    enemy.visible = false;
+    
+    createStandardExplosion(pos, 15);
+    
+    setTimeout(() => {
+        scene.remove(enemy);
+        enemies = enemies.filter(e => e !== enemy);
+        
+        // Respawn après un délai, mais SEULEMENT si canon actif
+        if (cannonActive) {
+            setTimeout(() => {
+                spawnEnemy(); // Le nouveau spawn aura la bonne orientation
+            }, 2000);
+        }
+    }, 100);
+}
+
+function destroyEnemyWithRing(enemy) {
+    const pos = enemy.position.clone();
+    enemy.visible = false;
+    
+    createRingExplosionComplete(pos, 12);
+    
+    setTimeout(() => {
+        scene.remove(enemy);
+        enemies = enemies.filter(e => e !== enemy);
+    }, 100);
+    
+    setTimeout(() => {
+        spawnEnemy();
+    }, 800);
+}
+
+// ===================================================================
+// SYSTÈME DE COMBAT SPATIAL - VERSION CORRIGÉE
+// ===================================================================
+
+// -------------------------------------------------------------------
+// 1. DÉCLARATION DES VARIABLES GLOBALES
+// -------------------------------------------------------------------
+
+
+// Couleurs des lasers
+const laserRed = new THREE.Color(1, 0.2, 0.1);
+const laserGreen = new THREE.Color(0.2, 1, 0.3);
+
+// -------------------------------------------------------------------
+// 2. FONCTION D'EXPLOSION RAPIDE (si elle n'existe pas)
+// -------------------------------------------------------------------
+
+// Si tu n'as pas createQuickExplosion, on utilise createStandardExplosion
+function createQuickExplosion(position, scale = 8) {
+    // Utilise ton système d'explosion existant
+    if (typeof createStandardExplosion === 'function') {
+        createStandardExplosion(position, scale);
+    } else if (typeof createVideoExplosion === 'function') {
+        createVideoExplosion(position, scale);
+    }
+}
+
+// -------------------------------------------------------------------
+// 3. CHARGEUR TIE
+// -------------------------------------------------------------------
+
+gltfLoader.load("tieinterlow.glb", (gltf) => {
+    tieModel = gltf.scene;
+    tieModel.scale.set(0.5,0.5,0.5);
+    tieModel.rotation.y += Math.PI;
+
+    
+    console.log("✅ TIE Interceptor chargé !");
+    
+    // Créer les TIE mais les cacher
+    for(let i = 0; i < 30; i++) {
+        spawnTie();
+    }
+    
+    // Les cacher immédiatement après création
+    friendlyShips.forEach(tie => {
+        tie.visible = false;
+    });
+// FORCER UNE PREMIÈRE MISE À JOUR POUR LES TIE
+    if (friendlyShips.length > 0 && typeof updateTies === 'function') {
+        for(let i = 0; i < 50; i++) {
+            updateTies(0.1);
+        }
+    }
+});
+
+// ===================================================================
+// FONCTION DE SPAWN CORRIGÉE POUR TIE
+// ===================================================================
+
+function spawnTie() {
+    if(!tieModel) return;
+
+
+    let tie = new THREE.Group();
+    let model = tieModel.clone();
+    model.rotation.y = Math.PI; // Même orientation que les X-Wing
+    tie.add(model);
+
+    // Position DEVANT le vaisseau mère (Z positif)
+    tie.position.set(
+        (Math.random() - 0.5) * 600,
+        (Math.random() - 0.5) * 200,
+        200 + Math.random() * 300
+    );
+
+    const now = performance.now() * 0.001;
+    
+    tie.userData = {
+        velocity: new THREE.Vector3(
+            (Math.random() - 0.5) * 12,
+            (Math.random() - 0.5) * 6,
+            25 + Math.random() * 15       // TOUJOURS POSITIF = vers l'avant
+        ),
+        targetQuat: null,
+        type: 'tie',
+        nextShot: now + 1 + Math.random() * 3,
+        fireRate: 1.5 + Math.random() * 2.5,
+        nextRandomExplosion: now + 5 + Math.random() * 10
+    };
+
+    scene.add(tie);
+    friendlyShips.push(tie);
+}
+
+// -------------------------------------------------------------------
+// 5. MOUVEMENT DES TIE
+// -------------------------------------------------------------------
+
+function updateTies(dt) {
+    if (!tieModel) return;
+    
+    const time = performance.now() * 0.001;
+
+    friendlyShips.forEach((tie, index) => {
+        if (!tie) return;
+        
+        const vel = tie.userData.velocity;
+        
+        // 1. FORCER LA DIRECTION VERS LE VAISSEAU MÈRE
+        vel.z = -35;
+        
+        // 2. MOUVEMENT EN BOUCLES
+        const loopPhase = time * 0.5 + index + 10;
+        const radius = 120;
+        
+        const targetX = Math.sin(loopPhase) * radius + Math.sin(time * 0.2 + index) * 150;
+        const targetY = Math.cos(loopPhase * 0.7) * radius + Math.cos(time * 0.3 + index) * 80;
+        
+        vel.x += (targetX - tie.position.x) * 0.02 * dt * 30;
+        vel.y += (targetY - tie.position.y) * 0.02 * dt * 30;
+        
+        // 3. APPLICATION
+        const newPosition = tie.position.clone().addScaledVector(vel, dt);
+        
+        // 4. GESTION DE LA DISTANCE
+        if (newPosition.z < 100) {
+            newPosition.z = 900 + Math.random() * 300;
+            newPosition.x = (Math.random() - 0.5) * 600;
+            newPosition.y = (Math.random() - 0.5) * 200;
+            
+            vel.x = (Math.random() - 0.5) * 8;
+            vel.y = (Math.random() - 0.5) * 4;
+        }
+        
+        // 5. LIMITES LATÉRALES
+        if (Math.abs(newPosition.x) > 700) {
+            newPosition.x = Math.sign(newPosition.x) * 700;
+            vel.x *= -0.3;
+        }
+        if (Math.abs(newPosition.y) > 250) {
+            newPosition.y = Math.sign(newPosition.y) * 250;
+            vel.y *= -0.3;
+        }
+        
+        tie.position.copy(newPosition);
+        
+        // 6. ORIENTATION
+        if (vel.length() > 0.1) {
+            const lookDir = vel.clone().normalize();
+            
+            if (!tie.userData.targetQuat) {
+                tie.userData.targetQuat = new THREE.Quaternion();
+            }
+            
+            const newTargetQuat = new THREE.Quaternion();
+            newTargetQuat.setFromUnitVectors(
+                new THREE.Vector3(0, 0, 1),
+                lookDir
+            );
+            
+            tie.userData.targetQuat.slerp(newTargetQuat, 0.05);
+            tie.quaternion.slerp(tie.userData.targetQuat, 0.03);
+        }
+    });
+    
+    // GÉRER LA VISIBILITÉ SÉPARÉMENT
+    friendlyShips.forEach(tie => {
+        if (tie) tie.visible = cannonActive;
+    });
+}
+
+// -------------------------------------------------------------------
+// 6. SYSTÈME DE LASERS (plus grands)
+// -------------------------------------------------------------------
+
+function createLaser(position, direction, color, isEnemy) {
+    const length = 60;
+    const geometry = new THREE.BufferGeometry();
+    
+    const vertices = new Float32Array([
+        0, 0, 0,
+        0, 0, -length
+    ]);
+    
+    geometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
+    
+    const material = new THREE.LineBasicMaterial({
+        color: color,
+        transparent: true,
+        opacity: 1.0,
+        blending: THREE.AdditiveBlending
+    });
+    
+    const laser = new THREE.Line(geometry, material);
+    
+    laser.position.copy(position);
+    laser.quaternion.setFromUnitVectors(
+        new THREE.Vector3(0, 0, 1),
+        direction.clone().normalize()
+    );
+    
+    laser.userData = {
+        velocity: direction.clone().multiplyScalar(400),
+        life: 1.2,
+        maxLife: 1.2,
+        isEnemy: isEnemy
+    };
+    
+    scene.add(laser);
+    
+    if (isEnemy) {
+        enemyLasers.push(laser);
+    } else {
+        friendlyLasers.push(laser);
+    }
+}
+
+function updateLasers(dt) {
+    if (!cannonActive) {
+        // Nettoyer tous les lasers si canon inactif
+        [...enemyLasers, ...friendlyLasers].forEach(laser => {
+            if (laser) scene.remove(laser);
+        });
+        enemyLasers = [];
+        friendlyLasers = [];
+        return;
+    }
+    
+    // Lasers rouges (X-Wing)
+    enemyLasers = enemyLasers.filter(laser => {
+        laser.position.addScaledVector(laser.userData.velocity, dt);
+        laser.userData.life -= dt * 1.5;
+        laser.material.opacity = laser.userData.life / laser.userData.maxLife;
+        
+        friendlyShips.forEach(tie => {
+            if (tie && tie.visible && laser.position.distanceTo(tie.position) < 25) {
+                destroyTie(tie);
+                laser.userData.life = 0;
+            }
+        });
+        
+        if (laser.userData.life <= 0 || Math.abs(laser.position.z) > 1000) {
+            scene.remove(laser);
+            return false;
+        }
+        return true;
+    });
+    
+    // Lasers verts (TIE)
+    friendlyLasers = friendlyLasers.filter(laser => {
+        laser.position.addScaledVector(laser.userData.velocity, dt);
+        laser.userData.life -= dt * 1.5;
+        laser.material.opacity = laser.userData.life / laser.userData.maxLife;
+        
+        enemies.forEach(enemy => {
+            if (enemy && enemy.visible && laser.position.distanceTo(enemy.position) < 25) {
+                destroyEnemy(enemy);
+                laser.userData.life = 0;
+            }
+        });
+        
+        if (laser.userData.life <= 0 || Math.abs(laser.position.z) > 1000) {
+            scene.remove(laser);
+            return false;
+        }
+        return true;
+    });
+}
+
+// -------------------------------------------------------------------
+// 7. TIRS ASYNCHRONES (avec décalage pour éviter la同步)
+// -------------------------------------------------------------------
+
+function updateShooting(dt) {
+    if (!cannonActive) return;
+    
+    const time = performance.now() * 0.001;
+    
+    // Tirs des X-Wing
+    enemies.forEach(enemy => {
+        if (!enemy || !enemy.visible) return;
+        
+        // Initialisation avec décalage aléatoire
+        if (enemy.userData.nextShot === undefined) {
+            enemy.userData.nextShot = time + Math.random() * 3;
+            enemy.userData.fireRate = 1.5 + Math.random() * 2.5;
+        }
+        
+        if (time > enemy.userData.nextShot && friendlyShips.length > 0) {
+            // Choisir une cible aléatoire
+            const target = friendlyShips[Math.floor(Math.random() * friendlyShips.length)];
+            if (target && target.visible) {
+                const direction = target.position.clone().sub(enemy.position).normalize();
+                createLaser(
+                    enemy.position.clone().add(direction.clone().multiplyScalar(15)),
+                    direction,
+                    laserRed,
+                    true
+                );
+            }
+            // Prochain tir avec variation
+            enemy.userData.nextShot = time + enemy.userData.fireRate * (0.8 + Math.random() * 0.4);
+        }
+    });
+    
+    // Tirs des TIE
+    friendlyShips.forEach(tie => {
+        if (!tie || !tie.visible) return;
+        
+        if (tie.userData.nextShot === undefined) {
+            tie.userData.nextShot = time + Math.random() * 3;
+            tie.userData.fireRate = 1.5 + Math.random() * 2.5;
+        }
+        
+        if (time > tie.userData.nextShot && enemies.length > 0) {
+            const target = enemies[Math.floor(Math.random() * enemies.length)];
+            if (target && target.visible) {
+                const direction = target.position.clone().sub(tie.position).normalize();
+                createLaser(
+                    tie.position.clone().add(direction.clone().multiplyScalar(15)),
+                    direction,
+                    laserGreen,
+                    false
+                );
+            }
+            tie.userData.nextShot = time + tie.userData.fireRate * (0.8 + Math.random() * 0.4);
+        }
+    });
+}
+
+// -------------------------------------------------------------------
+// 8. EXPLOSIONS ALÉATOIRES
+// -------------------------------------------------------------------
+
+function randomExplosions(dt) {
+    if (!cannonActive) return;
+    
+    const time = performance.now() * 0.001;
+    
+    // X-Wing explosent aléatoirement
+    enemies.forEach(enemy => {
+        if (!enemy || !enemy.visible) return;
+        
+        if (enemy.userData.nextRandomExplosion === undefined) {
+            enemy.userData.nextRandomExplosion = time + 3 + Math.random() * 8;
+        }
+        
+        if (time > enemy.userData.nextRandomExplosion) {
+            if (Math.random() < 0.3) {
+                destroyEnemy(enemy);
+            } else {
+                const nearPos = enemy.position.clone().add(
+                    new THREE.Vector3(
+                        (Math.random() - 0.5) * 40,
+                        (Math.random() - 0.5) * 40,
+                        (Math.random() - 0.5) * 40
+                    )
+                );
+                createQuickExplosion(nearPos, 10);
+            }
+            enemy.userData.nextRandomExplosion = time + 4 + Math.random() * 8;
+        }
+    });
+    
+    // TIE explosent aléatoirement
+    friendlyShips.forEach(tie => {
+        if (!tie || !tie.visible) return;
+        
+        if (tie.userData.nextRandomExplosion === undefined) {
+            tie.userData.nextRandomExplosion = time + 3 + Math.random() * 8;
+        }
+        
+        if (time > tie.userData.nextRandomExplosion) {
+            if (Math.random() < 0.3) {
+                destroyTie(tie);
+            } else {
+                const nearPos = tie.position.clone().add(
+                    new THREE.Vector3(
+                        (Math.random() - 0.5) * 40,
+                        (Math.random() - 0.5) * 40,
+                        (Math.random() - 0.5) * 40
+                    )
+                );
+                createQuickExplosion(nearPos, 10);
+            }
+            tie.userData.nextRandomExplosion = time + 4 + Math.random() * 8;
+        }
+    });
+}
+
+// -------------------------------------------------------------------
+// 9. DESTRUCTION DES TIE
+// -------------------------------------------------------------------
+function destroyTie(tie) {
+    if (!tie || !tie.visible) return;
+    if (!cannonActive) return;
+    
+    const pos = tie.position.clone();
+    tie.visible = false;
+    
+    createStandardExplosion(pos, 15);
+    
+    setTimeout(() => {
+        scene.remove(tie);
+        friendlyShips = friendlyShips.filter(t => t !== tie);
+        
+        if (cannonActive) {
+            setTimeout(() => {
+                spawnTie();
+            }, 3000);
+        }
+    }, 100);
+}
+// -------------------------------------------------------------------
+// 10. FONCTION DE MISE À JOUR GLOBALE
+// -------------------------------------------------------------------
+
+function updateCombat(dt) {
+    if (!tieModel) return;
+    
+    // On enlève la condition !cannonActive ici aussi
+    updateTies(dt);
+    updateShooting(dt);
+    updateLasers(dt);
+    randomExplosions(dt);
+}
+
+//======================== OK =====================================================
+
+
+
+
+
+
+// ===================================================================
+// GRANDS VAISSEAUX ENNEMIS - VERSION AVEC 3 PARTIES
+// ===================================================================
+
+let capitalShipParts = {
+    part1: null,
+    part2: null,
+    part3: null
+};
+let pivotRebel = new THREE.Group();
+let capitalShips = [];  // Tableau des vaisseaux complets
+
+const CAPITAL_SHIP = {
+    POSITION: new THREE.Vector3(0, 0, 1500),
+    ROTATION_SPEED: 0.1,
+    MAX_HITS_PER_PART: 3,
+    SPAWN_COUNT: 2,
+    SPACING: 2000
+};
+
+// ===================================================================
+// CHARGEMENT DES 3 PARTIES
+// ===================================================================
+
+let partsLoaded = 0;
+
+// Partie 1
+gltfLoader.load("capital_part1.glb", (gltf) => {
+    capitalShipParts.part1 = gltf.scene;
+    capitalShipParts.part1.scale.set(0.5,0.5,0.5);  // Ajustez l'échelle
+    capitalShipParts.part1.rotation.y = Math.PI/2;
+    console.log("✅ Partie 1 chargée");
+    partsLoaded++;
+    tryCreateCapitalShips();
+});
+
+// Partie 2
+gltfLoader.load("capital_part2.glb", (gltf) => {
+    capitalShipParts.part2 = gltf.scene;
+    capitalShipParts.part2.scale.set(0.5,0.5,0.5);
+    capitalShipParts.part2.rotation.y = Math.PI/2;
+    console.log("✅ Partie 2 chargée");
+    partsLoaded++;
+    tryCreateCapitalShips();
+});
+
+// Partie 3
+gltfLoader.load("capital_part3.glb", (gltf) => {
+    capitalShipParts.part3 = gltf.scene;
+    capitalShipParts.part3.scale.set(0.5,0.5,0.5);
+    capitalShipParts.part3.rotation.y = Math.PI/2;
+    console.log("✅ Partie 3 chargée");
+    partsLoaded++;
+    tryCreateCapitalShips();
+});
+
+// ===================================================================
+// CRÉATION D'UN VAISSEAU COMPLET
+// ===================================================================
+
+function createCapitalShip(xOffset = 0) {
+    const shipGroup = new THREE.Group();
+    const parts = [];
+    
+    // Cloner chaque partie et l'ajouter au groupe
+    // Comme elles ont la même origine, elles se placent automatiquement
+    // dans la bonne position relative les unes par rapport aux autres
+    
+    const partTypes = ['part1', 'part2', 'part3'];
+    
+    partTypes.forEach((type, index) => {
+        if (!capitalShipParts[type]) return;
+        
+        // Cloner la partie
+        const part = capitalShipParts[type].clone();
+        
+        // Ajouter les données utilisateur
+        part.userData = {
+            type: type,
+            hits: 0,
+            maxHits: CAPITAL_SHIP.MAX_HITS_PER_PART,
+            destroyed: false,
+            explosionTime: 0
+        };
+        
+        // Sauvegarder le matériau original
+        part.userData.originalMaterial = [];
+        part.traverse(child => {
+            if (child.isMesh) {
+                child.userData.originalMaterial = child.material.clone();
+                child.userData.hitMaterial = child.material.clone();
+                if (child.userData.hitMaterial.emissive) {
+                    child.userData.hitMaterial.emissive.setHex(0xaa0000);
+                }
+            }
+        });
+        
+        shipGroup.add(part);
+        parts.push(part);
+    });
+    
+    // Positionner le vaisseau
+    shipGroup.position.set(xOffset, 0, CAPITAL_SHIP.POSITION.z);
+    
+    // Données du vaisseau
+    shipGroup.userData = {
+        parts: parts,
+        destroyed: false
+    };
+    
+    return { group: shipGroup, parts: parts };
+}
+
+// ===================================================================
+// CRÉATION DES VAISSEAUX (QUAND TOUTES LES PARTIES SONT CHARGÉES)
+// ===================================================================
+
+function tryCreateCapitalShips() {
+    // Attendre que les 3 parties soient chargées
+    if (partsLoaded < 3) return;
+    
+    console.log("🚀 Création des vaisseaux capitaux...");
+    
+    // Créer le pivot
+    pivotRebel.position.set(0, 0, 0);
+    scene.add(pivotRebel);
+    
+    // Créer plusieurs vaisseaux
+    for (let i = 0; i < CAPITAL_SHIP.SPAWN_COUNT; i++) {
+        const xOffset = (i - (CAPITAL_SHIP.SPAWN_COUNT - 1) / 2) * CAPITAL_SHIP.SPACING;
+        const { group, parts } = createCapitalShip(xOffset);
+        
+        pivotRebel.add(group);
+        
+        capitalShips.push({
+            group: group,
+            parts: parts,
+            hitboxes: []  // Sera rempli plus tard
+        });
+    }
+    
+    console.log(`✅ ${CAPITAL_SHIP.SPAWN_COUNT} vaisseaux capitaux créés`);
+}
+
+// ===================================================================
+// MISE À JOUR
+// ===================================================================
+
+function updateCapitalShips(dt) {
+    // Faire tourner le pivot
+    pivotRebel.rotation.y += CAPITAL_SHIP.ROTATION_SPEED * dt;
+    
+    // Mettre à jour les effets de hit
+    capitalShips.forEach(ship => {
+        ship.parts.forEach(part => {
+            if (part.userData.explosionTime > 0) {
+                part.userData.explosionTime -= dt;
+                
+                // Effet de scintillement
+                if (part.userData.explosionTime > 0) {
+                    const intensity = Math.sin(part.userData.explosionTime * 30) * 0.5 + 0.5;
+                    part.traverse(child => {
+                        if (child.isMesh && child.material.emissive) {
+                            child.material.emissive.setHSL(0, 1, intensity * 0.3);
+                        }
+                    });
+                } else {
+                    // Restaurer le matériau original
+                    part.traverse(child => {
+                        if (child.isMesh && child.userData.originalMaterial) {
+                            child.material.copy(child.userData.originalMaterial);
+                        }
+                    });
+                }
+            }
+        });
+    });
+}
+
+// ===================================================================
+// DÉTECTION DES TIRS
+// ===================================================================
+
+function checkCapitalShipHit(laserPosition) {
+    for (let ship of capitalShips) {
+        for (let part of ship.parts) {
+            if (part.userData.destroyed) continue;
+            
+            // Récupérer la position mondiale de la partie
+            const worldPos = part.getWorldPosition(new THREE.Vector3());
+            
+            // Vérifier la distance (ajustez le rayon selon la taille)
+            const distance = laserPosition.distanceTo(worldPos);
+            if (distance < 150) {  // Rayon de détection
+                return hitCapitalShipPart(ship, part, laserPosition);
+            }
+        }
+    }
+    return false;
+}
+
+// ===================================================================
+// VERSION MODIFIÉE DE hitCapitalShipPart AVEC LOGS
+// ===================================================================
+
+// ===================================================================
+// VERSION SIMPLIFIÉE POUR TEST
+// ===================================================================
+
+function hitCapitalShipPart(ship, part, hitPosition) {
+    if (part.userData.destroyed) return false;
+    
+    part.userData.hits++;
+    console.log(`🎯 Hit ${part.userData.hits}/${part.userData.maxHits}`);
+    
+    // Effet de hit
+    part.userData.explosionTime = 0.3;
+    
+    // TEST : Forcer une explosion pour voir
+    console.log("🔥 Tentative d'explosion...");
+    createPartHitExplosion(hitPosition);
+    
+    if (part.userData.hits >= part.userData.maxHits) {
+        console.log("💀 Destruction !");
+        destroyCapitalShipPart(ship, part);
+        return true;
+    }
+    
+    return false;
+}
+
+// ===================================================================
+// EXPLOSION LOCALISÉE (QUAND ON TIRE SUR UNE PARTIE)
+// ===================================================================
+
+function createPartHitExplosion(position) {
+    console.log("💥 createPartHitExplosion appelée");
+    
+    // Utiliser DIRECTEMENT vos fonctions qui fonctionnent
+    if (typeof createStandardExplosion === 'function') {
+        createStandardExplosion(position, 15);
+    }
+    
+    if (typeof createSparkParticles === 'function') {
+        createSparkParticles(position, 12);
+    }
+}
+
+// ===================================================================
+// DESTRUCTION D'UNE PARTIE (AU BOUT DE 3 TIRS)
+// ===================================================================
+
+function destroyCapitalShipPart(ship, part) {
+    console.log("💢 destroyCapitalShipPart appelée");
+    part.userData.destroyed = true;
+    
+    // Position mondiale de la partie
+    const worldPos = part.getWorldPosition(new THREE.Vector3());
+    
+    // 1. GROSSE EXPLOSION DIRECTEMENT
+    if (typeof createRingExplosionComplete === 'function') {
+        createRingExplosionComplete(worldPos, 30);
+    } else if (typeof createStandardExplosion === 'function') {
+        createStandardExplosion(worldPos, 30);
+    }
+    
+    // 2. CHAÎNE D'EXPLOSIONS SIMPLE
+    for (let i = 0; i < 5; i++) {
+        setTimeout(() => {
+            const offset = new THREE.Vector3(
+                (Math.random() - 0.5) * 100,
+                (Math.random() - 0.5) * 100,
+                (Math.random() - 0.5) * 100
+            );
+            
+            if (typeof createStandardExplosion === 'function') {
+                createStandardExplosion(worldPos.clone().add(offset), 15);
+            }
+        }, i * 150);
+    }
+    
+    // 3. CACHER LA PARTIE
+    setTimeout(() => {
+        part.visible = false;
+    }, 200);
+    
+    // 4. VÉRIFIER SI TOUTES LES PARTIES SONT DÉTRUITES
+    setTimeout(() => {
+        const allDestroyed = ship.parts.every(p => p.userData.destroyed);
+        if (allDestroyed && typeof destroyWholeCapitalShip === 'function') {
+            destroyWholeCapitalShip(ship);
+        }
+    }, 500);
+}
+
+
+// ===================================================================
+// DESTRUCTION COMPLÈTE
+// ===================================================================
+
+function destroyWholeCapitalShip(ship) {
+    const worldPos = ship.group.getWorldPosition(new THREE.Vector3());
+    
+    // Explosion finale géante
+    createRingExplosionComplete(worldPos, 80);
+    
+    // Nuage de débris
+    for (let i = 0; i < 30; i++) {
+        setTimeout(() => {
+            const offset = new THREE.Vector3(
+                (Math.random() - 0.5) * 400,
+                (Math.random() - 0.5) * 400,
+                (Math.random() - 0.5) * 400
+            );
+            createStandardExplosion(worldPos.clone().add(offset), 30);
+        }, i * 30);
+    }
+    
+    // Supprimer le vaisseau
+    setTimeout(() => {
+        pivotRebel.remove(ship.group);
+        capitalShips = capitalShips.filter(s => s !== ship);
+    }, 2000);
+}
+
+// ===================================================================
+// APPEL DANS L'ANIMATE
+// ===================================================================
+
+// À AJOUTER dans votre animate()
+//updateCapitalShips(dt);
+
+
+
+
+
+
+
+
 //===================================================
 // CONTROL SCREEN
 //===================================================
@@ -1758,6 +3324,76 @@ renderer.domElement.addEventListener('click', (event) => {
 
     raycaster.setFromCamera(mouse, camera);
 
+     // =============== CAPITAL SHIPS ===============
+    checkCapitalShipClick(raycaster);
+    // =============================================
+    
+        const hits = raycaster.intersectObjects(enemies, true);
+    
+        if(hits.length > 0){
+    
+            let enemy = hits[0].object;
+    
+            while(enemy.parent && !enemies.includes(enemy)){
+                enemy = enemy.parent;
+            }
+    
+            destroyEnemyWithRing(enemy);
+            explosion.stop()
+            explosion.play()
+    
+        }
+    
+    
+    
+    // ===================================================================
+    // VÉRIFICATION DES CLICS SUR LES CAPITAL SHIPS
+    // ===================================================================
+    
+    function checkCapitalShipClick(raycaster) {
+        // Récupérer toutes les parties visibles des capital ships
+        const allParts = [];
+        capitalShips.forEach(ship => {
+            ship.parts.forEach(part => {
+                if (part.visible && !part.userData.destroyed) {
+                    allParts.push(part);
+                }
+            });
+        });
+        
+        if (allParts.length === 0) return false;
+        
+        // Tester les intersections
+        const intersects = raycaster.intersectObjects(allParts, true); // true pour les enfants
+        
+        if (intersects.length > 0) {
+            // Prendre la première intersection
+            const hit = intersects[0];
+            const hitPart = hit.object;
+            
+            // Remonter jusqu'à la partie parente (le groupe)
+            let partGroup = hitPart;
+            while (partGroup.parent && !partGroup.userData?.maxHits) {
+                partGroup = partGroup.parent;
+            }
+            
+            // Trouver à quel ship et quelle partie appartient cet objet
+            for (let ship of capitalShips) {
+                for (let part of ship.parts) {
+                    if (part === partGroup || part.children.includes(hitPart)) {
+                        // Touché !
+                        console.log("🎮 Clic détecté sur capital ship !");
+                        hitCapitalShipPart(ship, part, hit.point);
+                        return true;
+                    }
+                }
+            }
+        }
+        
+        return false;
+    }
+
+
     const intersects = raycaster.intersectObjects(worldGroup.children, true);
     if(intersects.length > 0){
         const clickedObject = intersects[0].object; // <-- déclaré ici
@@ -1834,29 +3470,56 @@ renderer.domElement.addEventListener('click', (event) => {
             playSoundSafe(R2);
         }
 
+        // ===================================================================
+        // BOUTON D'ACTIVATION/DÉSACTIVATION DU CANON
+        // ===================================================================
+        
         if (clickedObject.name.includes("Side_Control_Panels_Button_White_0001")) {
-
+        
             ignoreNextShot = true;
-
             cannonActive = !cannonActive;
-
+        
             setTimeout(() => {
                 ignoreNextShot = false;
             }, 100);
-
+        
             if (cannonActive) {
-
-                laserCannon.visible = true;
+                // ACTIVER LE CANON
+                laserCannon.visible = true;     
                 cannonTargetY = cannonVisibleY;
                 laseron.play();
-
+                
+                // RENDRE LES VAISSEAUX VISIBLES (ils existent déjà et ont bougé !)
+                enemies.forEach(enemy => {
+                    if (enemy) enemy.visible = true;
+                });
+                
+                friendlyShips.forEach(tie => {
+                    if (tie) tie.visible = true;
+                });
+        
             } else {
-
+                // DÉSACTIVER LE CANON
+                laserCannon.visible = false;
                 cannonTargetY = cannonHiddenY;
                 laseroff.play();
-
+                
+                // Cacher les vaisseaux
+                enemies.forEach(enemy => {
+                    if (enemy) enemy.visible = false;
+                });
+                
+                friendlyShips.forEach(tie => {
+                    if (tie) tie.visible = false;
+                });
+                
+                // Nettoyer les lasers
+                [...enemyLasers, ...friendlyLasers].forEach(laser => {
+                    if (laser) scene.remove(laser);
+                });
+                enemyLasers = [];
+                friendlyLasers = [];
             }
-
         }
 
         
@@ -2528,6 +4191,20 @@ else if (objectFade === "fadeIn") {
 
 
     updateCtrlScreenFade(dt);
+
+     // Mettre à jour les X-Wing seulement s'ils existent
+    if (enemies.length > 0) {
+        updateEnemies(dt);
+    }
+    
+    // Mettre à jour les explosions
+    updateExplosions(dt);
+    
+    // Mettre à jour les TIE seulement s'ils existent
+    if (tieModel && friendlyShips.length > 0) {
+        updateCombat(dt);
+    }
+    updateCapitalShips(dt);
 
     renderer.render(scene,camera);
 
