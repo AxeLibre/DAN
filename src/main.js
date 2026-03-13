@@ -3791,6 +3791,7 @@ function updateDoors() {
 
 function enableFlightMode() {
     playerState = "flight";
+    console.log("  ✅ enableFlightMode appelé - playerState =", playerState);
     tielaserAction.visible = true;
 }
 
@@ -3840,18 +3841,24 @@ function switchToFlightAudio() {
 // FONCTION
 
 function exitShip() {
-
-    console.log("Sortie du vaisseau");
+    console.log("🔴 Sortie du vaisseau - AVANT");
+    console.log("  isInsideShip (avant):", isInsideShip);
+    console.log("  playerState (avant):", playerState);
+    
     isInsideShip = false;
-
+    
+    console.log("  isInsideShip (après):", isInsideShip);
+    
     if (tiePlayer) tiePlayer.visible = false;
     if (sdt) sdt.visible = true;
     if (cockpit) cockpit.visible = true;
     if (star_destroyer0) star_destroyer0.visible = false;
 
     switchToFlightAudio();
-
     enableFlightMode();
+    
+    console.log("  playerState (après):", playerState);
+    console.log("🔴 Sortie du vaisseau - APRES");
 }
 
 function enterShip() {
@@ -3940,21 +3947,20 @@ function animate(){
 
     const dt = clock.getDelta();
 
-    if (playerState === "flight") {
-        currentFlightSpeed = THREE.MathUtils.lerp(
-            currentFlightSpeed,
-            maxFlightSpeed,
-            acceleration
-        );
-        // direction de la caméra
+   if (playerState === "flight") {
+    console.log("🚀 FLIGHT ACTIF - déplacement en cours"); // LOG
+    currentFlightSpeed = THREE.MathUtils.lerp(
+        currentFlightSpeed,
+        maxFlightSpeed,
+        acceleration
+    );
     const direction = new THREE.Vector3();
     camera.getWorldDirection(direction);
-
-    // avancer automatiquement
     player.position.addScaledVector(direction, currentFlightSpeed * 50 * dt);
-    } else {
-        currentFlightSpeed = walkSpeed;
-    }
+} else {
+    console.log("🚶 WALK ACTIF - pas de vol"); // LOG
+    currentFlightSpeed = walkSpeed;
+}
 
 
     if (!material) return;
