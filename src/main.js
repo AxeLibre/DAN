@@ -50,6 +50,7 @@ let button2;
 let button3;
 let poweroff;
 let explosion;
+let boom;
 let ctrlScreenVisible = false;
 let ctrlScreenFadeDirection = 0; // 1 = fade in, -1 = fade out
 const ctrlScreenFadeSpeed = 1.5;
@@ -3065,8 +3066,6 @@ Promise.all([
     loadJSON('public/deathstar.json'),
     loadJSON('public/darkmaul.json'),
     loadJSON('public/darkvador.json'),
-    loadJSON('public/emperor.json'),
-    loadJSON('public/snoke.json'),
     loadJSON('public/kylo.json')
 
 ]).then(datas => {
