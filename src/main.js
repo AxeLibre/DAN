@@ -3291,7 +3291,7 @@ window.addEventListener("keyup", (event) => {
 // =====================================================================================================================
 // CLICK                           PLAYER                                   SOURIS                                CLICK
 // =====================================================================================================================
-let ignoreNextShot = false;
+
 
 camera.updateMatrixWorld(true);
 renderer.domElement.addEventListener('click', (event) => {
