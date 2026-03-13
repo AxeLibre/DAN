@@ -207,7 +207,7 @@ scene.add(hemiLight);
 
 const listener2 = new THREE.AudioListener();
 camera.add(listener2);
-
+const audioLoader = new THREE.AudioLoader();
 const audioLoader2 = new THREE.AudioLoader();
 
 ambientSound = new THREE.Audio(listener2);
@@ -352,6 +352,8 @@ audioLoader2.load('public/explosion.mp3', function(buffer) {
     explosion.setLoop(false);   
     explosion.setVolume(2.0);  
 });
+
+boom = new THREE.Audio(listener3);
 
 audioLoader2.load('public/boom.mp3', function(buffer) {
     boom.setBuffer(buffer);
