@@ -1705,7 +1705,7 @@ function createVideoExplosion(position, scale = 8) { // 20 → 8
     };
 
     scene.add(plane);
-    .push(plane);
+    explosions.push(plane);
 
     videoex.currentTime = 0;
     videoex.play();
@@ -2136,7 +2136,7 @@ function updateExplosionParticles(dt) {
     });
 }
 
-function update(dt) {
+function updateExplosions(dt) {
     // Mise à jour des  vidéo
      = .filter(exp => {
         if (exp.userData.type === 'video') {
@@ -2535,7 +2535,7 @@ function updateShooting(dt) {
 // 8.  ALÉATOIRES
 // -------------------------------------------------------------------
 
-function random(dt) {
+function randomExplosions(dt) {
     if (!cannonActive) return;
     
     const time = performance.now() * 0.001;
@@ -2625,7 +2625,7 @@ function updateCombat(dt) {
     updateTies(dt);
     updateShooting(dt);
     updateLasers(dt);
-    random(dt);
+    randomExplosions(dt);
 }
 
 //======================== OK =====================================================
