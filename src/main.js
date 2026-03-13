@@ -3846,6 +3846,7 @@ function exitShip() {
     console.log("  playerState (avant):", playerState);
     
     isInsideShip = false;
+    playerState = "flight";
     
     console.log("  isInsideShip (après):", isInsideShip);
     
@@ -3865,6 +3866,7 @@ function enterShip() {
 
     console.log("Entrée dans le vaisseau");
     isInsideShip = true;
+    playerState = "walk";
 
     if (tiePlayer) tiePlayer.visible = true;
     if (sdt) sdt.visible = false;
