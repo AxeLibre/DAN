@@ -100,6 +100,7 @@ let xwingModel = null;      // Modèle X-Wing
 let enemyLasers = [];       // Lasers rouges (X-Wing)
 let friendlyLasers = [];    // Lasers verts (TIE)
 let explosions = [];                    // Explosions vidéo
+const listener = new THREE.AudioListener();
 // Rendre les fonctions d'explosion globales
 window.createStandardExplosion = createStandardExplosion;
 window.createSparkParticles = createSparkParticles;
@@ -140,7 +141,7 @@ const playButton = document.getElementById("playButton");
 playButton.addEventListener("click", () => {
 
     // débloque le contexte audio
-    const listener = new THREE.AudioListener();
+    
     camera.add(listener);
 
     if (ambientSound && ambientSound.buffer) {
@@ -1704,7 +1705,7 @@ function createVideoExplosion(position, scale = 8) { // 20 → 8
     };
 
     scene.add(plane);
-    explosions.push(plane);
+    .push(plane);
 
     videoex.currentTime = 0;
     videoex.play();
@@ -2057,7 +2058,7 @@ function createSparkParticles(position, count = 15) { // 30 → 15
 }
 
 // -------------------------------------------------------------------
-// 4. PRÉSÉLECTIONS D'EXPLOSIONS
+// 4. PRÉSÉLECTIONS D'
 // -------------------------------------------------------------------
 
 function createStandardExplosion(position, scale = 10) { // 20 → 10
@@ -2135,9 +2136,9 @@ function updateExplosionParticles(dt) {
     });
 }
 
-function updateExplosions(dt) {
-    // Mise à jour des explosions vidéo
-    explosions = explosions.filter(exp => {
+function update(dt) {
+    // Mise à jour des  vidéo
+     = .filter(exp => {
         if (exp.userData.type === 'video') {
             exp.lookAt(camera.position);
             
@@ -2531,10 +2532,10 @@ function updateShooting(dt) {
 }
 
 // -------------------------------------------------------------------
-// 8. EXPLOSIONS ALÉATOIRES
+// 8.  ALÉATOIRES
 // -------------------------------------------------------------------
 
-function randomExplosions(dt) {
+function random(dt) {
     if (!cannonActive) return;
     
     const time = performance.now() * 0.001;
@@ -2624,7 +2625,7 @@ function updateCombat(dt) {
     updateTies(dt);
     updateShooting(dt);
     updateLasers(dt);
-    randomExplosions(dt);
+    random(dt);
 }
 
 //======================== OK =====================================================
