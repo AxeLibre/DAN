@@ -2999,6 +2999,7 @@ function destroyWholeCapitalShip(ship) {
 
 
 
+
 //===================================================
 // CONTROL SCREEN
 //===================================================
@@ -3008,12 +3009,8 @@ function toggleCtrlScreen() {
 
     if (ctrlScreenVisible) {
         ctrlScreenFadeDirection = -1; // fade out
-        ctrlscreenoff.stop();
-        ctrlscreenoff.play();
     } else {
         ctrlScreenFadeDirection = 1; // fade in
-        ctrlscreenon.stop();
-        ctrlscreenon.play();
         ctrlscreen.play(); // démarre la vidéo si on l'allume
     }
 
@@ -3047,6 +3044,9 @@ function updateCtrlScreenFade(dt) {
 }
 
 
+
+
+
 // ===================================================
 // LOAD JSON      JSON        JSON
 // ===================================================
@@ -3065,7 +3065,10 @@ Promise.all([
     loadJSON('public/deathstar.json'),
     loadJSON('public/darkmaul.json'),
     loadJSON('public/darkvador.json'),
+    loadJSON('public/emperor.json'),
+    loadJSON('public/snoke.json'),
     loadJSON('public/kylo.json')
+
 ]).then(datas => {
 
     const shapes = datas.map(d => d.positions);
@@ -3234,6 +3237,10 @@ const pivot2 = scene.getObjectByName("pivot");
 if (tie) objectsToFade.push(tie);
 if (pivot2) objectsToFade.push(pivot2);
 
+objectsToFade.forEach(obj => {
+    obj.userData.originalPosition = obj.position.clone();
+});
+
 
 
 // =====================================================================================================================
@@ -3283,8 +3290,8 @@ document.addEventListener("keydown", (event) => {
 });
 
 document.addEventListener("keyup", (event) => {
-  if(keys.hasOwnProperty(event.key)) 
-    
+  if(keys.hasOwnProperty(event.key))
+
     keys[event.key] = false;
 });
 
@@ -3312,7 +3319,7 @@ window.addEventListener("keyup", (event) => {
 // =====================================================================================================================
 // CLICK                           PLAYER                                   SOURIS                                CLICK
 // =====================================================================================================================
-
+let ignoreNextShot = false;
 
 camera.updateMatrixWorld(true);
 renderer.domElement.addEventListener('click', (event) => {
@@ -3336,77 +3343,76 @@ renderer.domElement.addEventListener('click', (event) => {
 
     }
 
-
     raycaster.setFromCamera(mouse, camera);
 
-     // =============== CAPITAL SHIPS ===============
-    checkCapitalShipClick(raycaster);
-    // =============================================
-    
-        const hits = raycaster.intersectObjects(enemies, true);
-    
-        if(hits.length > 0){
-    
-            let enemy = hits[0].object;
-    
-            while(enemy.parent && !enemies.includes(enemy)){
-                enemy = enemy.parent;
-            }
-    
-            destroyEnemyWithRing(enemy);
-            explosion.stop()
-            explosion.play()
-    
+    // =============== CAPITAL SHIPS ===============
+checkCapitalShipClick(raycaster);
+// =============================================
+
+    const hits = raycaster.intersectObjects(enemies, true);
+
+    if(hits.length > 0){
+
+        let enemy = hits[0].object;
+
+        while(enemy.parent && !enemies.includes(enemy)){
+            enemy = enemy.parent;
         }
-    
-    
-    
-    // ===================================================================
-    // VÉRIFICATION DES CLICS SUR LES CAPITAL SHIPS
-    // ===================================================================
-    
-    function checkCapitalShipClick(raycaster) {
-        // Récupérer toutes les parties visibles des capital ships
-        const allParts = [];
-        capitalShips.forEach(ship => {
-            ship.parts.forEach(part => {
-                if (part.visible && !part.userData.destroyed) {
-                    allParts.push(part);
-                }
-            });
-        });
-        
-        if (allParts.length === 0) return false;
-        
-        // Tester les intersections
-        const intersects = raycaster.intersectObjects(allParts, true); // true pour les enfants
-        
-        if (intersects.length > 0) {
-            // Prendre la première intersection
-            const hit = intersects[0];
-            const hitPart = hit.object;
-            
-            // Remonter jusqu'à la partie parente (le groupe)
-            let partGroup = hitPart;
-            while (partGroup.parent && !partGroup.userData?.maxHits) {
-                partGroup = partGroup.parent;
-            }
-            
-            // Trouver à quel ship et quelle partie appartient cet objet
-            for (let ship of capitalShips) {
-                for (let part of ship.parts) {
-                    if (part === partGroup || part.children.includes(hitPart)) {
-                        // Touché !
-                        console.log("🎮 Clic détecté sur capital ship !");
-                        hitCapitalShipPart(ship, part, hit.point);
-                        return true;
-                    }
-                }
-            }
-        }
-        
-        return false;
+
+        destroyEnemyWithRing(enemy);
+        explosion.stop()
+        explosion.play()
+
     }
+
+
+
+// ===================================================================
+// VÉRIFICATION DES CLICS SUR LES CAPITAL SHIPS
+// ===================================================================
+
+function checkCapitalShipClick(raycaster) {
+    // Récupérer toutes les parties visibles des capital ships
+    const allParts = [];
+    capitalShips.forEach(ship => {
+        ship.parts.forEach(part => {
+            if (part.visible && !part.userData.destroyed) {
+                allParts.push(part);
+            }
+        });
+    });
+    
+    if (allParts.length === 0) return false;
+    
+    // Tester les intersections
+    const intersects = raycaster.intersectObjects(allParts, true); // true pour les enfants
+    
+    if (intersects.length > 0) {
+        // Prendre la première intersection
+        const hit = intersects[0];
+        const hitPart = hit.object;
+        
+        // Remonter jusqu'à la partie parente (le groupe)
+        let partGroup = hitPart;
+        while (partGroup.parent && !partGroup.userData?.maxHits) {
+            partGroup = partGroup.parent;
+        }
+        
+        // Trouver à quel ship et quelle partie appartient cet objet
+        for (let ship of capitalShips) {
+            for (let part of ship.parts) {
+                if (part === partGroup || part.children.includes(hitPart)) {
+                    // Touché !
+                    console.log("🎮 Clic détecté sur capital ship !");
+                    hitCapitalShipPart(ship, part, hit.point);
+                    return true;
+                }
+            }
+        }
+    }
+    
+    return false;
+}
 
 
     const intersects = raycaster.intersectObjects(worldGroup.children, true);
@@ -3421,26 +3427,26 @@ renderer.domElement.addEventListener('click', (event) => {
                 fadeState = "fadeIn";
                 objectFade = "fadeOut"; // 👈 on lance le fade objets
                 video.currentTime = 0;
-                video.muted = false;   // 🔊 on active le son
                 video.play();
             }
         }
 
-    
 
-        if (clickedObject.name.includes("Table_3_Button_Blue_0")) {
+
+        if (clickedObject.name.includes("HoloTabel_Bottom_Accessories_0")) {
 
             hologramActive = !hologramActive;
             hologramTarget = hologramActive ? 1 : 0;
 
             if (hologramActive) {
+                if (holoOnSound.isPlaying) holoOnSound.stop();
+                holoOnSound.play();
+            } else {
                 if (holoOffSound.isPlaying) holoOffSound.stop();
                 holoOffSound.play();
-            } else {
-                if (holoOff2Sound.isPlaying) holoOff2Sound.stop();
-                holoOff2Sound.play();
             }
         }
+
         if (clickedObject.name.includes("Table_2_Button_Blue_0")) {
 
                 open.play();
@@ -3485,61 +3491,61 @@ renderer.domElement.addEventListener('click', (event) => {
             playSoundSafe(R2);
         }
 
-        // ===================================================================
-        // BOUTON D'ACTIVATION/DÉSACTIVATION DU CANON
-        // ===================================================================
-        
-        if (clickedObject.name.includes("Side_Control_Panels_Button_White_0001")) {
-        
-            ignoreNextShot = true;
-            cannonActive = !cannonActive;
-        
-            setTimeout(() => {
-                ignoreNextShot = false;
-            }, 100);
-        
-            if (cannonActive) {
-                // ACTIVER LE CANON
-                laserCannon.visible = true;     
-                cannonTargetY = cannonVisibleY;
-                laseron.play();
-                
-                // RENDRE LES VAISSEAUX VISIBLES (ils existent déjà et ont bougé !)
-                enemies.forEach(enemy => {
-                    if (enemy) enemy.visible = true;
-                });
-                
-                friendlyShips.forEach(tie => {
-                    if (tie) tie.visible = true;
-                });
-        
-            } else {
-                // DÉSACTIVER LE CANON
-                laserCannon.visible = false;
-                cannonTargetY = cannonHiddenY;
-                laseroff.play();
-                
-                // Cacher les vaisseaux
-                enemies.forEach(enemy => {
-                    if (enemy) enemy.visible = false;
-                });
-                
-                friendlyShips.forEach(tie => {
-                    if (tie) tie.visible = false;
-                });
-                
-                // Nettoyer les lasers
-                [...enemyLasers, ...friendlyLasers].forEach(laser => {
-                    if (laser) scene.remove(laser);
-                });
-                enemyLasers = [];
-                friendlyLasers = [];
-            }
-        }
-
         
 
-        if (clickedObject.name.includes("Front_Control_Panels_Button_Red_0")) {
+// ===================================================================
+// BOUTON D'ACTIVATION/DÉSACTIVATION DU CANON
+// ===================================================================
+
+if (clickedObject.name.includes("Side_Control_Panels_Button_White_0001")) {
+
+    ignoreNextShot = true;
+    cannonActive = !cannonActive;
+
+    setTimeout(() => {
+        ignoreNextShot = false;
+    }, 100);
+
+    if (cannonActive) {
+        // ACTIVER LE CANON
+        laserCannon.visible = true;     
+        cannonTargetY = cannonVisibleY;
+        laseron.play();
+        
+        // RENDRE LES VAISSEAUX VISIBLES (ils existent déjà et ont bougé !)
+        enemies.forEach(enemy => {
+            if (enemy) enemy.visible = true;
+        });
+        
+        friendlyShips.forEach(tie => {
+            if (tie) tie.visible = true;
+        });
+
+    } else {
+        // DÉSACTIVER LE CANON
+        laserCannon.visible = false;
+        cannonTargetY = cannonHiddenY;
+        laseroff.play();
+        
+        // Cacher les vaisseaux
+        enemies.forEach(enemy => {
+            if (enemy) enemy.visible = false;
+        });
+        
+        friendlyShips.forEach(tie => {
+            if (tie) tie.visible = false;
+        });
+        
+        // Nettoyer les lasers
+        [...enemyLasers, ...friendlyLasers].forEach(laser => {
+            if (laser) scene.remove(laser);
+        });
+        enemyLasers = [];
+        friendlyLasers = [];
+    }
+}
+
+        if (clickedObject.name.includes("Side_Control_Panels_Button_Red_0001")) {
 
             if (!alarmActive) {
                 startAlarm();
@@ -3548,51 +3554,25 @@ renderer.domElement.addEventListener('click', (event) => {
             }
         }
 
-        if (clickedObject.name.includes("Table_1_Button_Red_0")) {
-
-            if (!alarmActive) {
-                startAlarm();
-            } else {
-                stopAlarm();
-            }
-        }
-
-            if (clickedObject.name.includes("Table_4_Button_Red_0")) {
-
-            if (!alarmActive) {
-                startAlarm();
-            } else {
-                stopAlarm();
-            }
-        }
-
-            if (clickedObject.name.includes("Side_Control_Panels_Button_Red_0001")) {
-
-            if (!alarmActive) {
-                startAlarm();
-            } else {
-                stopAlarm();
-            }
-        }
-
-            if (clickedObject.name.includes("Side_Control_Panels_Control_Panels_0001")) {
-
-                toggleCtrlScreen();
-    
-            }
-        
-                // Vérifier si c’est ton bouton rouge
+        // Vérifier si c’est ton bouton rouge
         if (clickedObject.name.includes("Table_3_Button_Red_0")) {
             onButtonClick(); // Appelle la fonction de gestion du clic
             transittionsound.stop(); // Arrêter le son s'il est en cours de lecture
             transittionsound.play();
         }
         
+
+        if (clickedObject.name.includes("Side_Control_Panels_Control_Panels_0001")) {
+
+            toggleCtrlScreen();
+
+        }
+
+        
         const shipHit = raycaster.intersectObject(tiePlayer, true);
 
         if (shipHit.length > 0) {
             
-            tiechange.stop();
             tiechange.play();
             // cacher le vaisseau actuel
             ships[shipIndex].visible = false;
@@ -3609,7 +3589,6 @@ renderer.domElement.addEventListener('click', (event) => {
 
             console.log("Nouveau vaisseau :", shipIndex);
         }
-        
             
         const mouse = new THREE.Vector2();
 
@@ -3656,6 +3635,8 @@ function tryMove(moveVector){
 }
 
 
+
+
 function updateCamera(dt = 0.016) {
 
     // accélération
@@ -3683,6 +3664,9 @@ function updateCamera(dt = 0.016) {
     }
 }
 
+
+
+
 // ==================
 // RESIZE
 // ==================
@@ -3695,6 +3679,7 @@ window.addEventListener('resize',()=>{
 
     let mouseX = 0;
     let mouseY = 0;
+
 
 renderer.domElement.addEventListener("mousemove", (event) => {
 
@@ -3733,20 +3718,7 @@ const trigger = new THREE.Mesh(
     trigger.position.set(0,0,-35);
 scene.add(trigger);
 
-// SON
 
-let doorSound;
-let doorSoundPlayed = false; // évite de spam le son
-
-
-
-doorSound = new THREE.Audio(listener);
-
-audioLoader.load('public/door.mp3', function(buffer) {
-    doorSound.setBuffer(buffer);
-    doorSound.setLoop(false);
-    doorSound.setVolume(0.7);
-});
 
 // Ouverture
 
@@ -3791,7 +3763,6 @@ function updateDoors() {
 
 function enableFlightMode() {
     playerState = "flight";
-    console.log("  ✅ enableFlightMode appelé - playerState =", playerState);
     tielaserAction.visible = true;
 }
 
@@ -3841,25 +3812,18 @@ function switchToFlightAudio() {
 // FONCTION
 
 function exitShip() {
-    console.log("🔴 Sortie du vaisseau - AVANT");
-    console.log("  isInsideShip (avant):", isInsideShip);
-    console.log("  playerState (avant):", playerState);
-    
+
+    console.log("Sortie du vaisseau");
     isInsideShip = false;
-    playerState = "flight";
-    
-    console.log("  isInsideShip (après):", isInsideShip);
-    
+
     if (tiePlayer) tiePlayer.visible = false;
     if (sdt) sdt.visible = true;
     if (cockpit) cockpit.visible = true;
     if (star_destroyer0) star_destroyer0.visible = false;
 
     switchToFlightAudio();
+
     enableFlightMode();
-    
-    console.log("  playerState (après):", playerState);
-    console.log("🔴 Sortie du vaisseau - APRES");
 }
 
 function enterShip() {
@@ -3877,7 +3841,6 @@ function enterShip() {
 
     enableWalkMode();
 }
-
 
 
 function updateinout() {
@@ -3934,6 +3897,30 @@ function onButtonClick() {
 
 
 
+setInterval(() => {
+    if (!cannonActive) return;
+    
+    // Vérifier les X-Wing
+    enemies.forEach(enemy => {
+        if (enemy && enemy.visible) {
+            // Si un vaisseau va dans le mauvais sens, on corrige
+            if (enemy.userData.velocity.z > 0) {
+                enemy.userData.velocity.z = -35;
+            }
+        }
+    });
+    
+    // Vérifier les TIE
+    friendlyShips.forEach(tie => {
+        if (tie && tie.visible) {
+            if (tie.userData.velocity.z > 0) {
+                tie.userData.velocity.z = -35;
+            }
+        }
+    });
+}, 3000); // Toutes les 3 secondes
+
+
 
 let envBlink = 0;
 let envToggle = false;
@@ -3941,29 +3928,32 @@ let levitationClock = new THREE.Clock();
 let baseY = null; // pas encore défini
 
 // =========================================================================================
+// =========================================================================================
 // ANIMATION     ANIMATION        ANIMATION           ANIMATION           ANIMATION
 // =========================================================================================
+// =========================================================================================
+
 function animate(){
 
     requestAnimationFrame(animate);
 
     const dt = clock.getDelta();
 
-   if (playerState === "flight") {
-    console.log("🚀 FLIGHT ACTIF - déplacement en cours"); // LOG
-    currentFlightSpeed = THREE.MathUtils.lerp(
-        currentFlightSpeed,
-        maxFlightSpeed,
-        acceleration
-    );
+    if (playerState === "flight") {
+        currentFlightSpeed = THREE.MathUtils.lerp(
+            currentFlightSpeed,
+            maxFlightSpeed,
+            acceleration
+        );
+        // direction de la caméra
     const direction = new THREE.Vector3();
     camera.getWorldDirection(direction);
-    player.position.addScaledVector(direction, currentFlightSpeed * 50 * dt);
-} else {
-    console.log("🚶 WALK ACTIF - pas de vol"); // LOG
-    currentFlightSpeed = walkSpeed;
-}
 
+    // avancer automatiquement
+    player.position.addScaledVector(direction, currentFlightSpeed * 50 * dt);
+    } else {
+        currentFlightSpeed = walkSpeed;
+    }
 
     if (!material) return;
 
@@ -4008,23 +3998,26 @@ function animate(){
     }
     else if (fadeState === "playing") {
         if (video.currentTime >= video.duration - 0.1 ) fadeState = "fadeOut";
+        
     }
     else if (fadeState === "fadeOut") {
         screenMaterial.opacity -= fadeSpeed;
         if (screenMaterial.opacity <= 0) {
-            boom.play();
+            explosion.play();
+            poweroff.play();
             screenMaterial.opacity = 0;
             video.pause();
             video.currentTime = 0;
             fadeState = "idle";
             isPlaying = false;
-
             objectFade = "fadeIn"; // 👈 on relance l’apparition
         }
     }
 }
 
-    // 🎬 Fade des objets 3D
+
+
+// 🎬 Fade des objets 3D
 if (objectFade === "fadeOut") {
 
     objectOpacity -= objectFadeSpeed;
@@ -4084,9 +4077,9 @@ else if (objectFade === "fadeIn") {
         objectFade = "idle";
     }
 }
-
+}
     updateDoors();
-    }
+    
 
     // ===== Hologram Fade =====
     if (material) {
@@ -4098,6 +4091,7 @@ else if (objectFade === "fadeIn") {
 
     material.uniforms.uOpacity.value = hologramOpacity;
     }
+    
 
     // ======= Levitation TIE PLAYER =====================
 
@@ -4111,11 +4105,13 @@ else if (objectFade === "fadeIn") {
 
     }
 
+
     updateinout();
 
-    if (tielaserMixer) {
+   if (tielaserMixer) {
         tielaserMixer.update(dt);
     };
+
 
     if (cannonActive && laserCannon) {
 
@@ -4161,41 +4157,48 @@ else if (objectFade === "fadeIn") {
 
     }
 
-    
+
+/*
+    if (laserMixer) {
+        laserMixer.update(dt);
+    };
+
+    // si tu as d'autres mixers
+    if (laserMixer) laserMixer.update(dt);
+*/
 
 
+if (alarmActive && panelMesh) {
 
-    if (alarmActive && panelMesh) {
+    blinkTime += dt * 2.805;
+    envBlink += dt * 2.805;
 
-        blinkTime += dt * 2.805;
-        envBlink += dt * 2.805;
-    
-        const mat = panelMesh.material;
-    
-        const pulse = (Math.sin(blinkTime) + 1) / 2;
-    
-        mat.emissive.set(0xff0000);
-        mat.emissiveIntensity = 1 + pulse * 4;
-        
-        // exposition synchronisée
-        renderer.toneMappingExposure = 0.3 + pulse * 0.6;
-        
-        
-        // SWITCH HDR synchronisé avec le pulse
-        const newToggle = pulse > 0.5;
-        
-        if (newToggle !== envToggle) {
-        
-            envToggle = newToggle;
-        
-            scene.environment = envToggle ? alarmHDR : mainHDRI;
-    }}
-    
-    if (!alarmActive) {
-    
-        scene.environment = mainHDRI;
-        renderer.toneMappingExposure = 0.3;
-    }
+    const mat = panelMesh.material;
+
+    const pulse = (Math.sin(blinkTime) + 1) / 2;
+
+mat.emissive.set(0xff0000);
+mat.emissiveIntensity = 1 + pulse * 4;
+
+// exposition synchronisée
+renderer.toneMappingExposure = 0.3 + pulse * 0.6;
+
+
+// SWITCH HDR synchronisé avec le pulse
+const newToggle = pulse > 0.5;
+
+if (newToggle !== envToggle) {
+
+    envToggle = newToggle;
+
+    scene.environment = envToggle ? alarmHDR : mainHDRI;
+}}
+
+if (!alarmActive) {
+
+    scene.environment = mainHDRI;
+    renderer.toneMappingExposure = 0.3;
+}
 
     if (cockpit && !isInsideShip) {
 
@@ -4216,7 +4219,8 @@ else if (objectFade === "fadeIn") {
 
     updateCtrlScreenFade(dt);
 
-     // Mettre à jour les X-Wing seulement s'ils existent
+
+  // Mettre à jour les X-Wing seulement s'ils existent
     if (enemies.length > 0) {
         updateEnemies(dt);
     }
@@ -4229,10 +4233,9 @@ else if (objectFade === "fadeIn") {
         updateCombat(dt);
     }
     updateCapitalShips(dt);
+    
 
     renderer.render(scene,camera);
-
-    
 
 }
 
