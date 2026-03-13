@@ -113,7 +113,7 @@ let video;
 video = document.createElement("video");
 video.src = "public/hyperscreen.mp4";
 video.loop = false;
-video.muted = true; // important
+video.muted = false; // important
 video.playsInline = true;
 video.pause();
 
