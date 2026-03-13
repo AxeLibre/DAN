@@ -697,7 +697,7 @@ loader8.load('public/hyperbouton.glb', (gltf)=>{
 });
 
 
-let screenMaterial; // ⚡ ajoute ça
+
 
 const loader9 = new GLTFLoader (loadingManager);
 
