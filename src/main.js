@@ -2137,8 +2137,8 @@ function updateExplosionParticles(dt) {
 }
 
 function updateExplosions(dt) {
-    // Mise à jour des  vidéo
-     = .filter(exp => {
+    // Mise à jour des explosions vidéo
+    explosions = explosions.filter(exp => {
         if (exp.userData.type === 'video') {
             exp.lookAt(camera.position);
             
