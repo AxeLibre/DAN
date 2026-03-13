@@ -65,7 +65,6 @@ let panelAction;
 let alarmSound;
 let alarmActive = false; // état ON/OFF
 let cockpitFloatTime = 0;
-let video;
 let videoTexture;
 let hyperscreen;
 let screenMaterial;
