@@ -1452,7 +1452,7 @@ const MOVEMENT = {
     MIN_SPEED: 30
 };
 
-gltfLoader.load("xwing.glb", (gltf) => {
+gltfLoader.load('public/xwing.glb', (gltf) => {
     xwingModel = gltf.scene;
     xwingModel.visible = true;
     xwingModel.scale.set(5,5,5);
@@ -1672,7 +1672,7 @@ setInterval(checkEnemiesPosition, 3000);
 // 1. CONFIGURATION VIDÉO
 // -------------------------------------------------------------------
 const videoex = document.createElement("video");
-videoex.src = "explosion.mp4";
+videoex.src = 'public/explosion.mp4';
 videoex.loop = false;
 videoex.muted = true;
 videoex.playsInline = true;
@@ -2241,7 +2241,7 @@ function createQuickExplosion(position, scale = 8) {
 // 3. CHARGEUR TIE
 // -------------------------------------------------------------------
 
-gltfLoader.load("tieinterlow.glb", (gltf) => {
+gltfLoader.load('public/tieinterlow.glb', (gltf) => {
     tieModel = gltf.scene;
     tieModel.scale.set(0.5,0.5,0.5);
     tieModel.rotation.y += Math.PI;
@@ -2672,7 +2672,7 @@ const CAPITAL_SHIP = {
 let partsLoaded = 0;
 
 // Partie 1
-gltfLoader.load("capital_part1.glb", (gltf) => {
+gltfLoader.load('public/capital_part1.glb', (gltf) => {
     capitalShipParts.part1 = gltf.scene;
     capitalShipParts.part1.scale.set(0.5,0.5,0.5);  // Ajustez l'échelle
     capitalShipParts.part1.rotation.y = Math.PI/2;
@@ -2682,7 +2682,7 @@ gltfLoader.load("capital_part1.glb", (gltf) => {
 });
 
 // Partie 2
-gltfLoader.load("capital_part2.glb", (gltf) => {
+gltfLoader.load('public/capital_part2.glb', (gltf) => {
     capitalShipParts.part2 = gltf.scene;
     capitalShipParts.part2.scale.set(0.5,0.5,0.5);
     capitalShipParts.part2.rotation.y = Math.PI/2;
@@ -2692,7 +2692,7 @@ gltfLoader.load("capital_part2.glb", (gltf) => {
 });
 
 // Partie 3
-gltfLoader.load("capital_part3.glb", (gltf) => {
+gltfLoader.load('public/capital_part3.glb', (gltf) => {
     capitalShipParts.part3 = gltf.scene;
     capitalShipParts.part3.scale.set(0.5,0.5,0.5);
     capitalShipParts.part3.rotation.y = Math.PI/2;
