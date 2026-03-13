@@ -386,6 +386,7 @@ function playSoundSafe(sound) {
 
 
 
+
 // ==================
 // SKYBOX
 // ==================
@@ -406,7 +407,7 @@ scene.background = cubeTexture;
 //Groupes d'objets
 // ==================
 const worldGroup = new THREE.Group();      // projecteur + décor
-const hologramGroup = new THREE.Group();   // HOLOGRAM 
+const hologramGroup = new THREE.Group();   // HOLOGRAM
 
 scene.add(worldGroup);
 scene.add(hologramGroup);
@@ -436,8 +437,8 @@ loader3.load('public/star_destroyer2.glb', (gltf)=>{
 
     const star_destroyer = gltf.scene;
 
-    star_destroyer.position.set(0, 10, 500);
-    star_destroyer.scale.set(15,15,15);
+    star_destroyer.position.set(0, 10, 1000);
+    star_destroyer.scale.set(30,30,30);
     star_destroyer.rotation.y = -Math.PI;
 
     pivot.add(star_destroyer);
@@ -445,19 +446,19 @@ loader3.load('public/star_destroyer2.glb', (gltf)=>{
 
 
 const star_destroyer2 = star_destroyer.clone();
-star_destroyer2.position.set(0, 20, -500);
-star_destroyer2.scale.set(15,15,15);
+star_destroyer2.position.set(0, 20, -1000);
+star_destroyer2.scale.set(30,30,30);
 star_destroyer2.rotation.y = Math.PI;
 pivot.add(star_destroyer2);
 
 });
-    
+
 const loader4= new GLTFLoader(loadingManager);
+let star_destroyer0;
 
 loader4.load('public/star_destroyer0.glb', (gltf)=>{
 
-
-    const star_destroyer0 = gltf.scene;
+    star_destroyer0 = gltf.scene;
     star_destroyer0.position.set(0, -65, 300);
     star_destroyer0.scale.set(50,40,50);
     star_destroyer0.rotation.y = -Math.PI/2; // faire face à la caméra
@@ -471,7 +472,7 @@ const mixers = []; // tableau global pour stocker les mixers des deathtroopers
 loader5.load('public/stormtrooper2.glb', (gltf) => {
     // Premier
     const stormtrooper1 = gltf.scene;
-    stormtrooper1.position.set(35, -12, 40);
+    stormtrooper1.position.set(35, -12, 35);
     stormtrooper1.scale.set(5,5,5);
     stormtrooper1.rotation.y = -Math.PI/2;
     worldGroup.add(stormtrooper1);
@@ -481,7 +482,7 @@ loader5.load('public/stormtrooper2.glb', (gltf) => {
 
     // Second clone ANIMABLE
     const stormtrooper2 = SkeletonUtils.clone(stormtrooper1); // ✅ clone correct pour squelette
-    stormtrooper2.position.set(-35, -12, 40);
+    stormtrooper2.position.set(-35, -12, 35);
     stormtrooper2.rotation.y = Math.PI/2;
     worldGroup.add(stormtrooper2);
 
@@ -508,7 +509,7 @@ loader5.load('public/stormtrooper2.glb', (gltf) => {
 
     mixers.push(mixer1, mixer2,mixer3,mixer4);
 
-    
+
 });
 
 const loader6 = new GLTFLoader(loadingManager);
@@ -520,10 +521,10 @@ loader6.load('public/k2so.glb', (gltf) => {
     k2so1.scale.set(8,8,8);
     k2so1.rotation.y = Math.PI/2;
     worldGroup.add(k2so1);
-    
+
     const mixer1 = new THREE.AnimationMixer(k2so1);
     mixer1.clipAction(gltf.animations[0]).play();
-    
+
     console.log(gltf.animations);
 
 
@@ -536,7 +537,7 @@ loader6.load('public/k2so.glb', (gltf) => {
 
     const mixer2 = new THREE.AnimationMixer(k2so2);
     mixer2.clipAction(gltf.animations[0]).play();
-    
+
     mixers.push(mixer1, mixer2)
 });
 
@@ -549,8 +550,8 @@ loader7.load('public/officer.glb', (gltf) => {
     officer1.scale.set(12,12,12);
     //officer1.rotation.y = -Math.PI;
     worldGroup.add(officer1);
-    
-    
+
+
     const mixer1 = new THREE.AnimationMixer(officer1);
     mixer1.clipAction(gltf.animations[0]).play();
 
@@ -559,9 +560,9 @@ loader7.load('public/officer.glb', (gltf) => {
     officer2.position.set(-33, -12, 123);
     officer2.rotation.y = -Math.PI/4;
     worldGroup.add(officer2);
-    
-    
-    
+
+
+
     const mixer2 = new THREE.AnimationMixer(officer2);
     mixer2.clipAction(gltf.animations[0]).play();
 
@@ -570,9 +571,9 @@ loader7.load('public/officer.glb', (gltf) => {
     officer3.position.set(-15, -30, 93);
     officer3.rotation.y = -Math.PI;
     worldGroup.add(officer3);
-    
-    
-    
+
+
+
     const mixer3 = new THREE.AnimationMixer(officer3);
     mixer3.clipAction(gltf.animations[0]).play();
 
@@ -580,7 +581,7 @@ loader7.load('public/officer.glb', (gltf) => {
     const officer4 = SkeletonUtils.clone(officer1); // ✅ clone correct pour squelette
     officer4.position.set(-15, -30, 75);
     worldGroup.add(officer4);
-    
+
     const mixer4 = new THREE.AnimationMixer(officer4);
     mixer4.clipAction(gltf.animations[0]).play();
 
@@ -589,7 +590,7 @@ loader7.load('public/officer.glb', (gltf) => {
     officer5.position.set(-25, -30, 70);
     officer5.rotation.y = -Math.PI/2
     worldGroup.add(officer5);
-    
+
     const mixer5 = new THREE.AnimationMixer(officer5);
     mixer5.clipAction(gltf.animations[0]).play();
 
@@ -598,7 +599,7 @@ loader7.load('public/officer.glb', (gltf) => {
     officer6.position.set(15, -30, 93);
     officer6.rotation.y = Math.PI;
     worldGroup.add(officer6);
-    
+
     const mixer6 = new THREE.AnimationMixer(officer6);
     mixer6.clipAction(gltf.animations[0]).play();
 
@@ -606,7 +607,7 @@ loader7.load('public/officer.glb', (gltf) => {
     const officer7 = SkeletonUtils.clone(officer1); // ✅ clone correct pour squelette
     officer7.position.set(15, -30, 75);
     worldGroup.add(officer7);
-    
+
     const mixer7 = new THREE.AnimationMixer(officer7);
     mixer7.clipAction(gltf.animations[0]).play();
 
@@ -624,7 +625,7 @@ loader7.load('public/officer.glb', (gltf) => {
     officer9.position.set(-25, -30, 85);
     officer9.rotation.y = -Math.PI/2
     worldGroup.add(officer9);
-    
+
     const mixer9 = new THREE.AnimationMixer(officer9);
     mixer9.clipAction(gltf.animations[0]).play();
 
@@ -633,20 +634,17 @@ loader7.load('public/officer.glb', (gltf) => {
     officer10.position.set(16, -28, 50);
     officer10.rotation.y = -Math.PI/2
     worldGroup.add(officer10);
-    
+
     //const helper = new THREE.BoxHelper(officer10, 0xff0000);
     //worldGroup.add(helper);
-    
+
     const mixer10 = new THREE.AnimationMixer(officer10);
     mixer10.clipAction(gltf.animations[0]).play();
-    
+
 
     mixers.push(mixer1,mixer2,mixer3,mixer4,mixer5,mixer6,mixer7,mixer8,mixer9,mixer10)
 
 });
-
-
-
 
 const ctrlscreen = document.createElement("video");
 ctrlscreen.src = "public/controlscreen.mp4";
@@ -679,6 +677,20 @@ scene.add(ctrlPlane);
 
 
 
+const video = document.createElement('video');
+video.src = 'public/hyperscreen.mp4'; // ton fichier vidéo
+video.loop = false;
+video.muted = false;       // obligatoire pour autoplay sur Chrome
+video.autoplay = false;            // démarre la vidéo
+video.crossOrigin = 'anonymous';
+
+const videoTexture = new THREE.VideoTexture(video);
+videoTexture.minFilter = THREE.LinearFilter;
+videoTexture.magFilter = THREE.LinearFilter;
+videoTexture.format = THREE.RGBFormat;
+
+
+let hyperscreen;
 let hyperbouton;
 
 const loader8 = new GLTFLoader (loadingManager);
@@ -687,7 +699,7 @@ loader8.load('public/hyperbouton.glb', (gltf)=>{
     hyperbouton = gltf.scene;
     hyperbouton.position.set(0,-12, 98.5);
     hyperbouton.scale.set(10,10,10);
-    hyperbouton.rotation.y = Math.PI; // faire face à la caméra
+    hyperbouton.rotation.y = Math.PI;
     hyperbouton.traverse(obj => {
     if (obj.isMesh) {
         console.log("Mesh trouvé :", obj.name);
@@ -697,7 +709,7 @@ loader8.load('public/hyperbouton.glb', (gltf)=>{
 });
 
 
-
+let screenMaterial; // ⚡ ajoute ça
 
 const loader9 = new GLTFLoader (loadingManager);
 
@@ -706,7 +718,7 @@ loader9.load('public/hyperscreen.glb', (gltf) => {
     hyperscreen.position.set(0,-300,100);
     hyperscreen.scale.set(50,150,70);
     hyperscreen.rotation.y = Math.PI;
-    console.log("videoTexture dans loader:", videoTexture);
+
     hyperscreen.traverse(obj => {
         if(obj.isMesh){
             screenMaterial = new THREE.MeshBasicMaterial({ // ⚡ récupéré ici
@@ -733,7 +745,7 @@ loader10.load('public/doorleft.glb', (gltf)=>{
     doorleft = gltf.scene; //
     doorleft.position.set(-12,-12, 233);
     doorleft.scale.set(10,10,10);
-    doorleft.rotation.y = Math.PI; // faire face à la caméra
+    doorleft.rotation.y = Math.PI; 
     worldGroup.add(doorleft);
 });
 
@@ -743,7 +755,7 @@ loader11.load('public/doorright.glb', (gltf)=>{
     doorright = gltf.scene; //
     doorright.position.set(12,-12, 233);
     doorright.scale.set(10,10,10);
-    doorright.rotation.y = Math.PI; // faire face à la caméra
+    doorright.rotation.y = Math.PI; 
     worldGroup.add(doorright);
 });
 
@@ -754,7 +766,7 @@ gltfLoader.load('public/shipDetection.glb', (gltf) => {
     detectionMesh = gltf.scene;
     detectionMesh.position.set(0,-12, 100);
     detectionMesh.scale.set(10,9,8.5);
-    detectionMesh.rotation.y = Math.PI; // faire face à la caméra
+    detectionMesh.rotation.y = Math.PI; 
     scene.add(detectionMesh);
     detectionMesh.visible = false;
 });
@@ -766,7 +778,7 @@ gltfLoader.load('public/cage.glb', (gltf) => {
     const ship = gltf.scene;
     ship.position.set(0,-12, 98.5);
     ship.scale.set(10,10,10);
-    ship.rotation.y = Math.PI; // faire face à la caméra
+    ship.rotation.y = Math.PI; 
     scene.add(ship);
 
     collisionMesh = ship.getObjectByName("COLLISION_MESH");
@@ -782,13 +794,13 @@ gltfLoader.load('public/cage.glb', (gltf) => {
 });
 });
 
-gltfLoader.load('public/star_destroyer_tower.glb', (gltf) => {
+gltfLoader.load('public/star_destroyer_tower2.glb', (gltf) => {
     sdt = gltf.scene;
     sdt.visible = false;
     scene.add(sdt);
     sdt.position.set(0,-12, 98.5);
     sdt.scale.set(10,10,10);
-    sdt.rotation.y = Math.PI; // faire face à la caméra
+    sdt.rotation.y = Math.PI; 
 });
 
 gltfLoader.load('public/tieplayer.glb', (gltf) => {
@@ -852,6 +864,10 @@ function addShip(ship) {
 
 
 
+
+
+
+
 gltfLoader.load('public/cockpit.glb', (gltf) => {
     cockpit = gltf.scene;
     cockpit.visible = false;
@@ -882,8 +898,8 @@ loader12.load('public/tie_fighter0.glb', (gltf) => {
     worldGroup.add(tiefighter0);
     objectsToFade.push(tiefighter0);
     console.log(gltf.animations);
-    
-    
+
+
     const mixer1 = new THREE.AnimationMixer(tiefighter0);
     mixer1.clipAction(gltf.animations[0]).play();
 
@@ -905,37 +921,13 @@ loader13.load('public/droid1.glb', (gltf) => {
     droid1.rotation.y = -Math.PI;
     worldGroup.add(droid1);
     console.log(gltf.animations);
-    
-    
+
+
     const mixer1 = new THREE.AnimationMixer(droid1);
     mixer1.clipAction(gltf.animations[0]).play();
 
     if (gltf.animations.length > 0) {
         const mixer1 = new THREE.AnimationMixer(droid1);
-        const action = mixer1.clipAction(gltf.animations[0]);
-        action.play();
-        mixers.push(mixer1);
-}
-
-});
-
-const loader14 = new GLTFLoader (loadingManager);
-
-loader14.load('public/bb9.glb', (gltf) => {
-    // Premier
-    const bb9 = gltf.scene;
-    bb9.position.set(0, -12, 98.5);
-    bb9.scale.set(10,10,10);
-    bb9.rotation.y = -Math.PI;
-    worldGroup.add(bb9);
-    console.log(gltf.animations);
-    
-    
-    const mixer1 = new THREE.AnimationMixer(bb9);
-    mixer1.clipAction(gltf.animations[0]).play();
-
-    if (gltf.animations.length > 0) {
-        const mixer1 = new THREE.AnimationMixer(bb9);
         const action = mixer1.clipAction(gltf.animations[0]);
         action.play();
         mixers.push(mixer1);
@@ -1025,7 +1017,6 @@ const screenMaterial3 = new THREE.MeshStandardMaterial({
     side: THREE.DoubleSide
 });
 
-
 const screen2 = new THREE.Mesh(screenGeometry, screenOffMaterial2);
 
 screen2.position.set(59, 6, -0.5); // ajuste selon ta scène
@@ -1048,7 +1039,6 @@ video4.pause();
 const videoTexture4 = new THREE.VideoTexture(video4);
 videoTexture4.colorSpace = THREE.SRGBColorSpace;
 
-// 3️⃣ material
 const screenMaterial4 = new THREE.MeshStandardMaterial({
     map: videoTexture4,
     roughness: 0.2,
@@ -1076,7 +1066,6 @@ video5.pause();
 const videoTexture5 = new THREE.VideoTexture(video5);
 videoTexture5.colorSpace = THREE.SRGBColorSpace;
 
-// 3️⃣ material
 const screenMaterial5 = new THREE.MeshStandardMaterial({
     map: videoTexture5,
     roughness: 0.2,
@@ -1122,7 +1111,7 @@ const screens = [
         videoMaterial: screenMaterial5,
         offMaterial: screenOffMaterial4,
         isOn: false
-    }    
+    }
 ];
 
 
@@ -1151,7 +1140,7 @@ function toggleScreen(screenObj) {
         screenObj.isOn = false;
     }
 }
-  
+
 
 const clickableObjects = [screen,screen2,screen3,screen4];
 
@@ -1181,16 +1170,16 @@ laserLoader.load('public/laser.glb', (gltf) => {
 });
 */
 // 🔊 LASER SOUND (utilise le listener global)
-const listener = new THREE.AudioListener();
-camera.add(listener);
+
 const laserSound = new THREE.Audio(listener);
 
-const audioLoader = new THREE.AudioLoader();
+
 
 audioLoader.load('public/laser.mp3', (buffer) => {
     laserSound.setBuffer(buffer);
-    laserSound.setVolume(1);
+    laserSound.setVolume(0.3);
 });
+
 
 // =================================================================
 // Nouveau LASER 
@@ -1202,7 +1191,7 @@ gltfLoader.load('public/laser_cannon.glb', (gltf) => {
 
     laserCannon = gltf.scene;
     laserCannon.visible = false;
-    laserCannon.position.set(0,-20,160);
+    laserCannon.position.set(0,-20,165);
     laserCannon.rotation.y += Math.PI;
 
 
@@ -1302,8 +1291,6 @@ function shootLaser() {
 
     setTimeout(()=>scene.remove(flash), 50);
 }
-
-
 
 
 
@@ -1425,7 +1412,7 @@ tieaudioLoader.load('public/tielaser.mp3', (buffer) => {
     tielaserSound.setVolume(1);
 });
 
-// ACTION TIR 
+// ACTION TIR
 
 function handleSpaceAction() {
 
@@ -1444,8 +1431,6 @@ function handleSpaceAction() {
         tielaserSound.play();
     }
 }
-
-
 
 // ===================================================================
 // VAISSEAUX ENNEMIS - VERSION AMÉLIORÉE
@@ -3318,7 +3303,7 @@ window.addEventListener("keyup", (event) => {
 // =====================================================================================================================
 // CLICK                           PLAYER                                   SOURIS                                CLICK
 // =====================================================================================================================
-
+let ignoreNextShot = false;
 
 camera.updateMatrixWorld(true);
 renderer.domElement.addEventListener('click', (event) => {
@@ -3445,45 +3430,9 @@ function checkCapitalShipClick(raycaster) {
                 holoOffSound.play();
             }
         }
-
         if (clickedObject.name.includes("Table_2_Button_Blue_0")) {
 
                 open.play();
-            }
-
-        if (clickedObject.name.includes("Side_Control_Panels_Button_White_0")) {
-
-                button2.play();
-            }
-
-        if (clickedObject.name.includes("Back_Control_Panels_Button_White_0")) {
-
-                button2.play();
-            }
-
-        if (clickedObject.name.includes("Side_Control_Panels_Button_Red_0")) {
-
-                button1.play();
-            }
-
-        if (clickedObject.name.includes("Back_Control_Panels_Button_Red_0")) {
-
-                button1.play();
-            }
-
-        if (clickedObject.name.includes("Side_Control_Panels_Button_Blue_0")) {
-
-                button3.play();
-            }
-
-        if (clickedObject.name.includes("Back_Control_Panels_Button_Blue_0")) {
-
-                button3.play();
-            }
-
-        if (clickedObject.name.includes("Front_Control_Panels_Button_Blue_0")) {
-
-                button3.play();
             }
 
         if (clickedObject.name.includes("Object_8")) {
@@ -3565,6 +3514,50 @@ if (clickedObject.name.includes("Side_Control_Panels_Button_White_0001")) {
 
             toggleCtrlScreen();
 
+        }
+
+         if (clickedObject.name.includes("Table_2_Button_Blue_0")) {
+
+                open.play();
+            }
+
+        if (clickedObject.name.includes("Side_Control_Panels_Button_White_0")) {
+
+                button2.play();
+            }
+
+        if (clickedObject.name.includes("Back_Control_Panels_Button_White_0")) {
+
+                button2.play();
+            }
+
+        if (clickedObject.name.includes("Side_Control_Panels_Button_Red_0")) {
+
+                button1.play();
+            }
+
+        if (clickedObject.name.includes("Back_Control_Panels_Button_Red_0")) {
+
+                button1.play();
+            }
+
+        if (clickedObject.name.includes("Side_Control_Panels_Button_Blue_0")) {
+
+                button3.play();
+            }
+
+        if (clickedObject.name.includes("Back_Control_Panels_Button_Blue_0")) {
+
+                button3.play();
+            }
+
+        if (clickedObject.name.includes("Front_Control_Panels_Button_Blue_0")) {
+
+                button3.play();
+            }
+
+        if (clickedObject.name.includes("Object_8")) {
+            playSoundSafe(R2);
         }
 
         
@@ -3829,7 +3822,7 @@ function enterShip() {
 
     console.log("Entrée dans le vaisseau");
     isInsideShip = true;
-    playerState = "walk";
+    playerState = "flight";
 
     if (tiePlayer) tiePlayer.visible = true;
     if (sdt) sdt.visible = false;
@@ -4002,8 +3995,7 @@ function animate(){
     else if (fadeState === "fadeOut") {
         screenMaterial.opacity -= fadeSpeed;
         if (screenMaterial.opacity <= 0) {
-            explosion.play();
-            poweroff.play();
+            boom.play();
             screenMaterial.opacity = 0;
             video.pause();
             video.currentTime = 0;
