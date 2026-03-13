@@ -235,13 +235,21 @@ camera.add(listener3);
 
 const audioLoader3 = new THREE.AudioLoader();
 
-const ctrlscreenon = new THREE.Audio(listener3);
 
+const ctrlscreenon = new THREE.Audio(listener3);
 
 audioLoader3.load('public/sounds/holo_on.mp3', buffer => {
     ctrlscreenon.setBuffer(buffer);
     ctrlscreenon.setVolume(1.5);
 });
+
+const holoOnSound = new THREE.Audio(listener);
+
+audioLoader3.load('public/sounds/holo_on.mp3', buffer => {
+    holoOnSound.setBuffer(buffer);
+    holoOnSound.setVolume(1.5);
+});
+
 
 const ctrlscreenoff = new THREE.Audio(listener3);
 
@@ -3425,8 +3433,8 @@ function checkCapitalShipClick(raycaster) {
                 if (holoOnSound.isPlaying) holoOnSound.stop();
                 holoOnSound.play();
             } else {
-                if (holoOffSound.isPlaying) holoOffSound.stop();
-                holoOffSound.play();
+                if (holoOffSound2.isPlaying) holoOffSound2.stop();
+                holoOffSound2.play();
             }
         }
         if (clickedObject.name.includes("Table_2_Button_Blue_0")) {
