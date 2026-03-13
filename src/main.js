@@ -344,6 +344,21 @@ audioLoader2.load('public/laseroff.mp3', function(buffer) {
     laseroff.setVolume(2.0);  
 });
 
+explosion = new THREE.Audio(listener3);
+
+audioLoader2.load('public/explosion.mp3', function(buffer) {
+    explosion.setBuffer(buffer);
+    explosion.setLoop(false);   
+    explosion.setVolume(2.0);  
+});
+
+audioLoader2.load('public/boom.mp3', function(buffer) {
+    explosion.setBuffer(buffer);
+    explosion.setLoop(false);   
+    explosion.setVolume(2.0);  
+});
+
+
 
 // 🎧 Listener
 const listener4 = new THREE.AudioListener();
@@ -3989,6 +4004,7 @@ function animate(){
     else if (fadeState === "fadeOut") {
         screenMaterial.opacity -= fadeSpeed;
         if (screenMaterial.opacity <= 0) {
+            explosion.play();
             screenMaterial.opacity = 0;
             video.pause();
             video.currentTime = 0;
