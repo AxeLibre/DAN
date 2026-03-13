@@ -19,7 +19,7 @@ let hologramActive = false;   // état logique ON/OFF
 let hologramOpacity = 0;     // valeur actuelle
 let hologramTarget = 0;      // 0 ou 1
 const hologramFadeSpeed = 0.03;
-
+let doorSound;
 let playerBox = new THREE.Box3();
 let isInsideShip = true;
 let playerState = "walk"; // "walk" | "flight"
@@ -359,6 +359,14 @@ audioLoader2.load('public/boom.mp3', function(buffer) {
     boom.setBuffer(buffer);
     boom.setLoop(false);   
     boom.setVolume(2.0);  
+});
+
+// Son des portes
+doorSound = new THREE.Audio(listener3);  
+
+audioLoader2.load('public/door.mp3', function(buffer) { 
+    doorSound.setBuffer(buffer);
+    doorSound.setVolume(0.5);
 });
 
 
