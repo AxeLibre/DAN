@@ -107,7 +107,7 @@ window.createRingExplosionComplete = createRingExplosionComplete;
 
 
 
-
+let video;
 
 video = document.createElement("video");
 video.src = "public/hyperscreen.mp4";
