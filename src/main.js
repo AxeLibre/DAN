@@ -678,7 +678,7 @@ scene.add(ctrlPlane);
 
 
 
-let hyperscreen;
+
 let hyperbouton;
 
 const loader8 = new GLTFLoader (loadingManager);
