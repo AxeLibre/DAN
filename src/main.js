@@ -676,17 +676,6 @@ scene.add(ctrlPlane);
 
 
 
-const video = document.createElement('video');
-video.src = 'public/hyperscreen.mp4'; // ton fichier vidéo
-video.loop = false;
-video.muted = false;       // obligatoire pour autoplay sur Chrome
-video.autoplay = false;            // démarre la vidéo
-video.crossOrigin = 'anonymous';
-
-const videoTexture = new THREE.VideoTexture(video);
-videoTexture.minFilter = THREE.LinearFilter;
-videoTexture.magFilter = THREE.LinearFilter;
-videoTexture.format = THREE.RGBFormat;
 
 
 let hyperscreen;
