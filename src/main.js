@@ -353,9 +353,9 @@ audioLoader2.load('public/explosion.mp3', function(buffer) {
 });
 
 audioLoader2.load('public/boom.mp3', function(buffer) {
-    explosion.setBuffer(buffer);
-    explosion.setLoop(false);   
-    explosion.setVolume(2.0);  
+    boom.setBuffer(buffer);
+    boom.setLoop(false);   
+    boom.setVolume(2.0);  
 });
 
 
@@ -4004,7 +4004,7 @@ function animate(){
     else if (fadeState === "fadeOut") {
         screenMaterial.opacity -= fadeSpeed;
         if (screenMaterial.opacity <= 0) {
-            explosion.play();
+            boom.play();
             screenMaterial.opacity = 0;
             video.pause();
             video.currentTime = 0;
