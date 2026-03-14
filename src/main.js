@@ -450,7 +450,7 @@ loader3.load('public/star_destroyer2.glb', (gltf)=>{
 
     const star_destroyer = gltf.scene;
 
-    star_destroyer.position.set(0, 10, 1000);
+    star_destroyer.position.set(0, 10, 900);
     star_destroyer.scale.set(30,30,30);
     star_destroyer.rotation.y = -Math.PI;
 
@@ -459,7 +459,7 @@ loader3.load('public/star_destroyer2.glb', (gltf)=>{
 
 
 const star_destroyer2 = star_destroyer.clone();
-star_destroyer2.position.set(0, 20, -1000);
+star_destroyer2.position.set(0, 20, -900);
 star_destroyer2.scale.set(30,30,30);
 star_destroyer2.rotation.y = Math.PI;
 pivot.add(star_destroyer2);
