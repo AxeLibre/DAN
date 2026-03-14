@@ -169,6 +169,7 @@ camera.rotation.order = "YXZ";
 // Renderer
 renderer = new THREE.WebGLRenderer({antialias:true});
 renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(window.devicePixelRatio);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 0.3;
@@ -936,6 +937,32 @@ loader13.load('public/droid1.glb', (gltf) => {
 }
 
 });
+
+loader13.load('public/bb9.glb', (gltf) => {
+    // Premier
+    const bb9 = gltf.scene;
+    bb9.position.set(0, -12, 98.5);
+    bb9.scale.set(10,10,10);
+    bb9.rotation.y = -Math.PI;
+    worldGroup.add(bb9);
+    console.log(gltf.animations);
+
+
+    const mixer1 = new THREE.AnimationMixer(bb9);
+    mixer1.clipAction(gltf.animations[0]).play();
+
+    if (gltf.animations.length > 0) {
+        const mixer1 = new THREE.AnimationMixer(bb9);
+        const action = mixer1.clipAction(gltf.animations[0]);
+        action.play();
+        mixers.push(mixer1);
+}
+
+});
+
+
+
+
 
 
 // Texture VIDEO ON / OFF
