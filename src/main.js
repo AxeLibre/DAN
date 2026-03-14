@@ -243,12 +243,7 @@ audioLoader3.load('public/sounds/holo_on.mp3', buffer => {
     ctrlscreenon.setVolume(1.5);
 });
 
-const holoOnSound = new THREE.Audio(listener);
 
-audioLoader3.load('public/sounds/holo_on.mp3', buffer => {
-    holoOnSound.setBuffer(buffer);
-    holoOnSound.setVolume(1.5);
-});
 
 
 const ctrlscreenoff = new THREE.Audio(listener3);
@@ -258,18 +253,18 @@ audioLoader3.load('public/sounds/ctrlscreenoff.mp3', buffer => {
     ctrlscreenoff.setVolume(1.5);
 });
 
-const holoOffSound = new THREE.Audio(listener3);
+const holoOnSound = new THREE.Audio(listener3);
 
 audioLoader3.load('public/sounds/holo_off.mp3', buffer => {
-    holoOffSound.setBuffer(buffer);
-    holoOffSound.setVolume(0.6);
+    holoOnSound.setBuffer(buffer);
+    holoOnSound.setVolume(0.6);
 });
 
-const holoOff2Sound = new THREE.Audio(listener3);
+const holoOffSound2 = new THREE.Audio(listener3);
 
 audioLoader3.load('public/sounds/holooff.mp3', buffer => {
-    holoOff2Sound.setBuffer(buffer);
-    holoOff2Sound.setVolume(0.6);
+    holoOffSound2.setBuffer(buffer);
+    holoOffSound2.setVolume(0.6);
 });
 
 
