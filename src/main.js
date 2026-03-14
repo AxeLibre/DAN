@@ -3027,9 +3027,11 @@ function toggleCtrlScreen() {
     } else {
         ctrlScreenFadeDirection = 1; // fade in
         ctrlscreen.play(); // démarre la vidéo si on l'allume
+        ctrlscreenon.play()
     }
 
     ctrlScreenVisible = !ctrlScreenVisible;
+    ctrlscreenoff.play()
 }
 
 function updateCtrlScreenFade(dt) {
@@ -3080,7 +3082,8 @@ Promise.all([
     loadJSON('public/deathstar.json'),
     loadJSON('public/darkmaul.json'),
     loadJSON('public/darkvador.json'),
-    loadJSON('public/kylo.json')
+    loadJSON('public/kylo.json'),
+    loadJSON('public/galaxy.json')
 
 ]).then(datas => {
 
