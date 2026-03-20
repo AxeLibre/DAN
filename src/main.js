@@ -387,7 +387,7 @@ audioLoader2.load('public/door.mp3', function(buffer) {
 
 button2 = new THREE.Audio(listener3);
 
-audioLoader2.load('public/bipbip6.Wav', function(buffer) {
+audioLoader2.load('public/bipbip6.WAV', function(buffer) {
     button2.setBuffer(buffer);
     button2.setLoop(false);   
     button2.setVolume(2.0);  
@@ -395,7 +395,7 @@ audioLoader2.load('public/bipbip6.Wav', function(buffer) {
 
 button1 = new THREE.Audio(listener3);
 
-audioLoader2.load('public/bipbip1.Wav', function(buffer) {
+audioLoader2.load('public/bipbip1.WAV', function(buffer) {
     button2.setBuffer(buffer);
     button2.setLoop(false);   
     button2.setVolume(2.0);  
