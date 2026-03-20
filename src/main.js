@@ -845,7 +845,7 @@ gltfLoader.load('public/cage.glb', (gltf) => {
     });
 
     // ✅ TOUT le reste reste DANS le callback
-    if (!collisionMeshExterior && !) {
+    if (!collisionMeshExterior && collisionMeshInterior!) {
         console.warn('⚠️ Aucun mesh nommé trouvé');
     }
 
