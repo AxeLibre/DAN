@@ -831,7 +831,7 @@ gltfLoader.load('public/cage.glb', (gltf) => {
     ship.traverse(obj => {
         if (obj.isMesh) {
             if (obj.name === "COLLISION_MESH") {
-                 = obj;
+               collisionMeshInterior  = obj;
                 console.log('✅ Intérieur:', obj.name);
             } else if (obj.name === "COLLISION_MESH_EXTERIOR") {
                 collisionMeshExterior = obj;
@@ -849,7 +849,7 @@ gltfLoader.load('public/cage.glb', (gltf) => {
         console.warn('⚠️ Aucun mesh nommé trouvé');
     }
 
-    console.log('Intérieur:', ?.name);
+    console.log('Intérieur:', collisionMeshInterior?.name);
     console.log('Extérieur:', collisionMeshExterior?.name);
 
 }); // ← une seule fermeture ici
