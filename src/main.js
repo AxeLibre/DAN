@@ -101,6 +101,9 @@ let enemyLasers = [];       // Lasers rouges (X-Wing)
 let friendlyLasers = [];    // Lasers verts (TIE)
 let explosions = [];                    // Explosions vidéo
 const listener = new THREE.AudioListener();
+let collisionMeshInterior;
+let collisionMeshExterior;
+let collisionShip;
 // Rendre les fonctions d'explosion globales
 window.createStandardExplosion = createStandardExplosion;
 window.createSparkParticles = createSparkParticles;
@@ -814,9 +817,7 @@ gltfLoader.load('public/shipDetection.glb', (gltf) => {
     detectionMesh.visible = false;
 });
 
-let collisionMeshInterior;
-let collisionMeshExterior;
-let collisionShip;
+
 
 gltfLoader.load('public/cage.glb', (gltf) => {
     const ship = gltf.scene;
@@ -830,7 +831,7 @@ gltfLoader.load('public/cage.glb', (gltf) => {
     ship.traverse(obj => {
         if (obj.isMesh) {
             if (obj.name === "COLLISION_MESH") {
-                collisionMeshInterior = obj;
+                 = obj;
                 console.log('✅ Intérieur:', obj.name);
             } else if (obj.name === "COLLISION_MESH_EXTERIOR") {
                 collisionMeshExterior = obj;
@@ -844,11 +845,11 @@ gltfLoader.load('public/cage.glb', (gltf) => {
     });
 
     // ✅ TOUT le reste reste DANS le callback
-    if (!collisionMeshExterior && !collisionMeshInterior) {
+    if (!collisionMeshExterior && !) {
         console.warn('⚠️ Aucun mesh nommé trouvé');
     }
 
-    console.log('Intérieur:', collisionMeshInterior?.name);
+    console.log('Intérieur:', ?.name);
     console.log('Extérieur:', collisionMeshExterior?.name);
 
 }); // ← une seule fermeture ici
