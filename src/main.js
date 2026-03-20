@@ -403,7 +403,7 @@ audioLoader2.load('public/bipbip1.Wav', function(buffer) {
 
 button3 = new THREE.Audio(listener3);
 
-audioLoader2.load('public/sound/button0.mp3', function(buffer) {
+audioLoader2.load('public/sounds/button0.mp3', function(buffer) {
     button3.setBuffer(buffer);
     button3.setLoop(false);   
     button3.setVolume(2.0);  
