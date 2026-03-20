@@ -814,7 +814,9 @@ gltfLoader.load('public/shipDetection.glb', (gltf) => {
     detectionMesh.visible = false;
 });
 
-let collisionMesh;
+let collisionMeshInterior;
+let collisionMeshExterior;
+let collisionShip;
 
 gltfLoader.load('public/cage.glb', (gltf) => {
     const ship = gltf.scene;
