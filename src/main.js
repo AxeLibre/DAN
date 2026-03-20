@@ -111,7 +111,7 @@ window.createRingExplosionComplete = createRingExplosionComplete;
 
 const starJediFont = new FontFace(
     "StarJedi",
-    "url(/fonts/Starjedi.ttf)"
+    "url(/DAN/fonts/Starjedi.ttf)"
 );
 
 starJediFont.load().then(function(font){
