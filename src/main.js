@@ -106,6 +106,15 @@ window.createStandardExplosion = createStandardExplosion;
 window.createSparkParticles = createSparkParticles;
 window.createRingExplosionComplete = createRingExplosionComplete;
 
+const starJediFont = new FontFace(
+    "StarJedi",
+    "url(/public/Starjedi.ttf)"
+);
+
+starJediFont.load().then(function(font){
+    document.fonts.add(font);
+    console.log("StarJedi chargée");
+});
 
 
 let video;
@@ -373,6 +382,37 @@ audioLoader2.load('public/door.mp3', function(buffer) {
     doorSound.setVolume(0.5);
 });
 
+button2 = new THREE.Audio(listener3);
+
+audioLoader2.load('public/bipbip6.Wav', function(buffer) {
+    button2.setBuffer(buffer);
+    button2.setLoop(false);   
+    button2.setVolume(2.0);  
+});
+
+button1 = new THREE.Audio(listener3);
+
+audioLoader2.load('public/bipbip1.Wav', function(buffer) {
+    button2.setBuffer(buffer);
+    button2.setLoop(false);   
+    button2.setVolume(2.0);  
+});
+
+button3 = new THREE.Audio(listener3);
+
+audioLoader2.load('public/sound/button0.mp3', function(buffer) {
+    button3.setBuffer(buffer);
+    button3.setLoop(false);   
+    button3.setVolume(2.0);  
+});
+
+// Son collision métallique                                    *********************
+const metalCollisionSound = new THREE.Audio(listener);
+audioLoader2.load('public/sounds/metal_impact.mp3', function(buffer) {
+    metalCollisionSound.setBuffer(buffer);
+    metalCollisionSound.setLoop(false);
+    metalCollisionSound.setVolume(0.8);
+});
 
 
 // 🎧 Listener
@@ -777,25 +817,58 @@ gltfLoader.load('public/shipDetection.glb', (gltf) => {
 let collisionMesh;
 
 gltfLoader.load('public/cage.glb', (gltf) => {
-
     const ship = gltf.scene;
-    ship.position.set(0,-12, 98.5);
-    ship.scale.set(10,10,10);
-    ship.rotation.y = Math.PI; 
+    collisionShip = ship;
+    ship.position.set(0, -12, 98.5);
+    ship.scale.set(10, 10, 10);
+    ship.rotation.y = Math.PI;
     scene.add(ship);
+    ship.updateMatrixWorld(true);
 
-    collisionMesh = ship.getObjectByName("COLLISION_MESH");
+    ship.traverse(obj => {
+        if (obj.isMesh) {
+            if (obj.name === "COLLISION_MESH") {
+                collisionMeshInterior = obj;
+                console.log('✅ Intérieur:', obj.name);
+            } else if (obj.name === "COLLISION_MESH_EXTERIOR") {
+                collisionMeshExterior = obj;
+                console.log('✅ Extérieur:', obj.name);
+            }
+            obj.material = new THREE.MeshBasicMaterial({
+                visible: false,
+                side: THREE.DoubleSide,
+            });
+        }
+    });
 
-    collisionMesh.visible = false; // invisible en jeu
-    collisionMesh.traverse(obj=>{
-    if(obj.isMesh){
-        obj.material = new THREE.MeshBasicMaterial({
-            color: 0xff0000,
-            wireframe: true
-        });
+    // ✅ TOUT le reste reste DANS le callback
+    if (!collisionMeshExterior && !collisionMeshInterior) {
+        console.warn('⚠️ Aucun mesh nommé trouvé');
     }
-});
-});
+
+    console.log('Intérieur:', collisionMeshInterior?.name);
+    console.log('Extérieur:', collisionMeshExterior?.name);
+
+}); // ← une seule fermeture ici
+    
+    // Debug visuel
+    [collisionMeshInterior, collisionMeshExterior].forEach((mesh, index) => {
+        if (mesh) {
+            const color = index === 0 ? 0xff0000 : 0x00ff00;
+            mesh.visible = true;
+            mesh.traverse(obj => {
+                if (obj.isMesh) {
+                    obj.material = new THREE.MeshBasicMaterial({
+                        color: color,
+                        wireframe: true,
+                        transparent: true,
+                        opacity: 0.3,
+                        side: THREE.DoubleSide // Force la détection des deux côtés
+                    });
+                }
+            });
+        }
+    });
 
 gltfLoader.load('public/star_destroyer_tower2.glb', (gltf) => {
     sdt = gltf.scene;
@@ -826,6 +899,31 @@ gltfLoader.load('public/tiefighter.glb', (gltf) => {
     tieLoaded = true;
     checkGameReady();
     addShip(tiefighter);
+
+    const tiefighter2 = tiefighter.clone();
+    tiefighter2.position.set(12, 15, -70);
+    scene.add(tiefighter2);
+
+    const tiefighter3 = tiefighter.clone();
+    tiefighter3.position.set(12, 15, -58);
+    scene.add(tiefighter3);
+
+    const tiefighter4 = tiefighter.clone();
+    tiefighter4.position.set(0, 15, -70);
+    scene.add(tiefighter4);
+
+    const tiefighter5 = tiefighter.clone();
+    tiefighter5.position.set(0, 15, -58);
+    scene.add(tiefighter5);
+
+    const tiefighter6 = tiefighter.clone();
+    tiefighter6.position.set(-12, 15, -70);
+    scene.add(tiefighter6);
+
+    const tiefighter7 = tiefighter.clone();
+    tiefighter7.position.set(-12, 15, -58);
+    scene.add(tiefighter7);
+});
 });
 
 gltfLoader.load('public/tieinter.glb', (gltf) => {
@@ -849,6 +947,34 @@ gltfLoader.load('public/tiesilencer.glb', (gltf) => {
     tieLoaded = true;
     checkGameReady();
     addShip(tiesilencer);
+});
+
+let screenhangar;
+
+gltfLoader.load('public/screenhangar.glb', (gltf) => {
+    screenhangar = gltf.scene;
+    screenhangar.position.set(-22, -12, -73);
+    screenhangar.scale.set(6,6,6);
+    screenhangar.rotation.y = Math.PI/2; 
+    scene.add(screenhangar);
+    checkGameReady();
+});
+
+let hangaracc1;
+
+gltfLoader.load('public/hangaracc1.glb', (gltf) => {
+    hangaracc1 = gltf.scene;
+    hangaracc1.position.set(20, -12, -75);
+    hangaracc1.scale.set(4, 4, 4);
+    hangaracc1.rotation.y = Math.PI / 1.8;
+    scene.add(hangaracc1);
+    checkGameReady();
+
+
+    const hangaracc2 = hangaracc1.clone();
+    hangaracc2.position.set(20, -12, -68);
+    hangaracc2.rotation.y = Math.PI / 2.1;
+    scene.add(hangaracc2);
 });
 
 
@@ -961,6 +1087,558 @@ loader13.load('public/bb9.glb', (gltf) => {
 });
 
 
+
+
+let Table_3_Button_Panel_0;
+let Table_3_Button_Red_0;
+let Table_3_Button_Blue_0;
+
+loader13.load('public/Table_3_Button_Panel_0.glb', (gltf) => {
+    Table_3_Button_Panel_0 = gltf.scene;
+    Table_3_Button_Panel_0.position.set(0, -12, 98.5);
+    Table_3_Button_Panel_0.scale.set(10,10,10);
+    Table_3_Button_Panel_0.rotation.y = -Math.PI;
+    scene.add(Table_3_Button_Panel_0);
+    
+});
+
+
+
+// Appelle initButtonColors après le chargement
+loader13.load('public/Table_3_Button_Red_0.glb', (gltf) => {
+    Table_3_Button_Red_0 = gltf.scene;
+    Table_3_Button_Red_0.position.set(0, -12, 98.5);
+    Table_3_Button_Red_0.scale.set(10,10,10);
+    Table_3_Button_Red_0.rotation.y = -Math.PI;
+    scene.add(Table_3_Button_Red_0);
+    
+    // Initialise les couleurs et récupère les meshes
+    initButtonColors();
+});
+
+
+
+// Variables pour l'animation du chenillard
+let chaseTime = 0;
+let chaseActive = false;
+const chaseSpeed = 0.2; // Vitesse de changement (secondes entre chaque bouton)
+
+// Fonction pour initialiser les couleurs des boutons
+function initButtonColors() {
+    if (!Table_3_Button_Red_0) return;
+    
+    // Récupère tous les meshes du bouton
+    const buttonMeshes = [];
+    Table_3_Button_Red_0.traverse(child => {
+        if (child.isMesh) {
+            buttonMeshes.push(child);
+        }
+    });
+    
+    // Stocke les meshes dans userData pour y accéder facilement
+    Table_3_Button_Red_0.userData.buttonMeshes = buttonMeshes;
+    
+    // Initialise tous les boutons éteints
+    resetAllButtons();
+}
+
+// Éteindre tous les boutons
+function resetAllButtons() {
+    if (!Table_3_Button_Red_0 || !Table_3_Button_Red_0.userData.buttonMeshes) return;
+    
+    Table_3_Button_Red_0.userData.buttonMeshes.forEach(mesh => {
+        if (mesh.material) {
+            mesh.material.emissive.setHex(0x220000); // Rouge très sombre
+            mesh.material.emissiveIntensity = 0.2;
+        }
+    });
+}
+
+// Allumer un bouton spécifique
+function lightUpButton(index, intensity = 2.0) {
+    if (!Table_3_Button_Red_0 || !Table_3_Button_Red_0.userData.buttonMeshes) return;
+    
+    const meshes = Table_3_Button_Red_0.userData.buttonMeshes;
+    if (index >= 0 && index < meshes.length) {
+        meshes[index].material.emissive.setHSL(0.02, 1, 0.5); // Orange vif
+        meshes[index].material.emissiveIntensity = intensity;
+    }
+}
+
+// Animation du chenillard
+
+function updateChaseSmooth(dt) {
+    if (!chaseActive || !Table_3_Button_Red_0 || !Table_3_Button_Red_0.userData.buttonMeshes) return;
+    
+    const meshes = Table_3_Button_Red_0.userData.buttonMeshes;
+    const buttonCount = meshes.length;
+    
+    chaseTime += dt * 2; // Vitesse du cycle
+    
+    // Calcule une valeur entre 0 et 2*PI qui avance
+    const phase = chaseTime * Math.PI * 2;
+    
+    for (let i = 0; i < buttonCount; i++) {
+        // Décale la phase pour chaque bouton
+        const offset = (i / buttonCount) * Math.PI * 2;
+        // Intensité sinusoidale (entre 0.2 et 3.0)
+        const intensity = 1.5 + Math.sin(phase - offset) * 1.5;
+        
+        meshes[i].material.emissive.setHSL(0.03, 1, 0.3);
+        meshes[i].material.emissiveIntensity = intensity;
+    }
+}
+
+// Variables pour le bouton bleu
+let blueChaseActive = true; 
+let blueChaseTime = 0;
+
+// Charge le bouton bleu
+loader13.load('public/Table_3_Button_Blue_0.glb', (gltf) => {
+    Table_3_Button_Blue_0 = gltf.scene;
+    Table_3_Button_Blue_0.position.set(0, -12, 98.5);
+    Table_3_Button_Blue_0.scale.set(10,10,10);
+    Table_3_Button_Blue_0.rotation.y = -Math.PI;
+    scene.add(Table_3_Button_Blue_0);
+    
+    // Récupère tous les meshes du bouton bleu
+    const blueMeshes = [];
+    Table_3_Button_Blue_0.traverse(child => {
+        if (child.isMesh) {
+            blueMeshes.push(child);
+        }
+    });
+    Table_3_Button_Blue_0.userData.buttonMeshes = blueMeshes;
+    
+    // Initialise l'état éteint
+    setBlueButtonState(false);
+});
+
+// Fonction pour allumer/éteindre le bouton bleu
+function setBlueButtonState(active) {
+    if (!Table_3_Button_Blue_0 || !Table_3_Button_Blue_0.userData.buttonMeshes) return;
+    
+    const meshes = Table_3_Button_Blue_0.userData.buttonMeshes;
+    
+    meshes.forEach(mesh => {
+        if (active) {
+            // HOLOGRAMME ACTIF : bouton allumé fixe
+            mesh.material.emissive.setHSL(0.6, 1, 0.5); // Bleu vif
+            mesh.material.emissiveIntensity = 2.0;
+            mesh.material.color.setHSL(0.6, 1, 0.3);
+        } else {
+            // HOLOGRAMME ÉTEINT : bouton éteint (prêt pour le chase)
+            mesh.material.emissive.setHSL(0.6, 1, 0.05); // Bleu très sombre
+            mesh.material.emissiveIntensity = 0.2;
+            mesh.material.color.setHSL(0.6, 1, 0.1);
+        }
+    });
+}
+
+// Animation chaseSmooth pour le bouton bleu (quand hologramme éteint)
+function updateBlueChaseSmooth(dt) {
+    if (!blueChaseActive || !Table_3_Button_Blue_0 || !Table_3_Button_Blue_0.userData.buttonMeshes) return;
+    
+    const meshes = Table_3_Button_Blue_0.userData.buttonMeshes;
+    const buttonCount = meshes.length; // 6 boutons
+    
+    blueChaseTime += dt * 2.5; // Vitesse du cycle (un peu plus rapide pour le bleu)
+    
+    // Calcule une valeur entre 0 et 2*PI qui avance
+    const phase = blueChaseTime * Math.PI * 2;
+    
+    for (let i = 0; i < buttonCount; i++) {
+        // Décale la phase pour chaque bouton
+        const offset = (i / buttonCount) * Math.PI * 2;
+        // Intensité sinusoidale (entre 0.2 et 2.5)
+        const intensity = 1.3 + Math.sin(phase - offset) * 1.1;
+        
+        meshes[i].material.emissive.setHSL(0.6, 1, 0.3); // Bleu
+        meshes[i].material.emissiveIntensity = intensity;
+        // Légère variation de couleur aussi
+        meshes[i].material.color.setHSL(0.6, 1, 0.1 + intensity * 0.1);
+    }
+}
+
+// ===========================================================
+// BOUTONS BLANCS - Version avec gris foncé (pas noir complet)
+// ===========================================================
+
+let Back_Control_Panels_Button_White_0;
+const whiteButtons = [];
+const buttonStates = [];
+
+// Charge le modèle
+loader13.load('public/Back_Control_Panels_Button_White_0.glb', (gltf) => {
+    Back_Control_Panels_Button_White_0 = gltf.scene;
+    Back_Control_Panels_Button_White_0.position.set(0, -12, 98.5);
+    Back_Control_Panels_Button_White_0.scale.set(10,10,10);
+    Back_Control_Panels_Button_White_0.rotation.y = -Math.PI;
+    scene.add(Back_Control_Panels_Button_White_0);
+    
+    // Récupère TOUS les boutons
+    Back_Control_Panels_Button_White_0.traverse(child => {
+        if (child.isMesh) {
+            // Clone le matériau pour indépendance
+            if (child.material) {
+                if (Array.isArray(child.material)) {
+                    child.material = child.material.map(m => m.clone());
+                } else {
+                    child.material = child.material.clone();
+                }
+            }
+            
+            whiteButtons.push(child);
+            
+            // États avec valeurs ajustées
+            buttonStates.push({
+                intensity: 0.2 + Math.random() * 0.2,     // Gris foncé au départ (0.2-0.4)
+                targetIntensity: 0.2 + Math.random() * 0.2,
+                blinkSpeed: 2 + Math.random() * 4,
+                nextChange: Math.random() * 2,
+                phase: Math.random() * Math.PI * 2,
+            });
+            
+            // Initialise en gris foncé
+            if (child.material.emissive) {
+                child.material.emissive.setHSL(0, 0, 0.15); // Gris foncé
+                child.material.emissiveIntensity = 0.3;
+            }
+            if (child.material.color) {
+                child.material.color.setHSL(0, 0, 0.2); // Gris moyen-foncé
+            }
+        }
+    });
+    
+    console.log(`✨ ${whiteButtons.length} boutons blancs chargés (gris foncé)`);
+});
+
+function updateWhiteButtonsContrast(dt) {
+    if (!whiteButtons.length) return;
+    
+    whiteButtons.forEach((button, index) => {
+        const state = buttonStates[index];
+        if (!state || !button.material) return;
+        
+        // Met à jour le minuteur
+        state.nextChange -= dt;
+        
+        if (state.nextChange <= 0) {
+            // 70% de chance de s'allumer
+            if (Math.random() < 0.7) {
+                state.targetIntensity = 3.0 + Math.random() * 3.0; // Lumineux (3-6)
+            } else {
+                state.targetIntensity = 0.25 + Math.random() * 0.3; // Gris foncé (0.25-0.55)
+            }
+            
+            // Prochain changement
+            state.nextChange = 0.4 + Math.random() * 2.6;
+            state.blinkSpeed = 3 + Math.random() * 5;
+        }
+        
+        // Transition
+        state.intensity += (state.targetIntensity - state.intensity) * state.blinkSpeed * dt;
+        
+        // Micro-fluctuation
+        const flicker = Math.sin(performance.now() * 0.02 + index) * 0.1;
+        let finalIntensity = state.intensity + flicker;
+        
+        // Maintient dans des plages contrastées mais pas extrêmes
+        if (state.targetIntensity < 0.6) {
+            // Mode "éteint" : entre 0.2 et 0.6
+            finalIntensity = Math.max(0.2, Math.min(0.6, finalIntensity));
+        } else {
+            // Mode "allumé" : entre 2.5 et 7
+            finalIntensity = Math.max(2.5, Math.min(7, finalIntensity));
+        }
+        
+        // Applique
+        if (button.material.emissive) {
+            button.material.emissiveIntensity = finalIntensity;
+            
+            // Couleur selon l'état
+            if (finalIntensity > 1.5) {
+                // Allumé : blanc légèrement bleuté
+                button.material.emissive.setHSL(0.58, 0.4, 0.5);
+            } else {
+                // Éteint : gris foncé
+                button.material.emissive.setHSL(0, 0, 0.15 + finalIntensity * 0.1);
+            }
+        }
+    });
+}
+
+// Version avec plus de nuances (pour un effet encore plus réaliste)
+function updateWhiteButtonsNuanced(dt) {
+    if (!whiteButtons.length) return;
+    
+    whiteButtons.forEach((button, index) => {
+        const state = buttonStates[index];
+        if (!state || !button.material) return;
+        
+        state.nextChange -= dt;
+        
+        if (state.nextChange <= 0) {
+            // Plus de variété dans les intensités
+            const rand = Math.random();
+            if (rand < 0.4) {
+                state.targetIntensity = 0.3 + Math.random() * 0.3; // Gris foncé
+            } else if (rand < 0.7) {
+                state.targetIntensity = 1.5 + Math.random() * 1.5; // Mi-lumineux
+            } else {
+                state.targetIntensity = 4.0 + Math.random() * 2.0; // Très lumineux
+            }
+            
+            state.nextChange = 0.5 + Math.random() * 3;
+            state.blinkSpeed = 2 + Math.random() * 4;
+        }
+        
+        // Transition en douceur
+        state.intensity += (state.targetIntensity - state.intensity) * state.blinkSpeed * dt;
+        
+        // Petite fluctuation naturelle
+        const breath = Math.sin(performance.now() * 0.01 + index * 10) * 0.1;
+        const finalIntensity = Math.max(0.2, state.intensity + breath);
+        
+        // Applique
+        if (button.material.emissive) {
+            button.material.emissiveIntensity = finalIntensity;
+            
+            // Variation de couleur subtile selon l'intensité
+            const hue = 0.55 + (finalIntensity * 0.01);
+            const lightness = 0.15 + (finalIntensity * 0.05);
+            button.material.emissive.setHSL(hue, 0.3, Math.min(0.5, lightness));
+        }
+    });
+}
+// =============================================
+// BULLES INFO
+// =============================================
+// ================================
+// BULLES INFO POUR THREE.JS
+// ================================
+
+// 1️⃣ Fonction pour créer une bulle HTML
+function createInfoBubble(text, imageSrc) {
+
+    const container = document.createElement("div");
+
+    container.style.position = "fixed";
+    container.style.left = "20px";
+    container.style.bottom = "20px";
+    container.style.width = "350px";
+
+    container.style.display = "flex";
+    container.style.alignItems = "center";
+    container.style.gap = "15px";
+
+    container.style.padding = "15px";
+    container.style.background = "rgba(0,0,0,0.75)";
+    container.style.borderRadius = "12px";
+    container.style.color = "#FFE81F";
+    container.style.fontFamily = "StarJedi, sans-serif";
+    container.style.fontSize = "22px";
+    container.style.pointerEvents = "none";
+    container.style.display = "hidden";
+
+    // bordure dégradée
+    container.style.boxShadow = `
+    0 0 10px rgba(255,232,31,0.4),
+    0 0 20px rgba(255,232,31,0.2),
+    inset 0 0 20px rgba(255,232,31,0.15)
+    `;
+
+    // image
+    const img = document.createElement("img");
+    img.src = imageSrc;
+    img.style.width = "120px";
+    img.style.height = "auto";
+    img.style.marginRight = "15px";
+
+    // texte
+    const txt = document.createElement("div");
+    txt.innerHTML = text.replace(/\n/g, "<br>");
+    txt.style.flex = "1";
+    txt.style.fontFamily = "StarJedi";
+
+    container.appendChild(img);
+    container.appendChild(txt);
+
+    document.body.appendChild(container);
+
+    return container;
+}
+
+// 2️⃣ Crée les bulles
+const bubble1 = createInfoBubble(
+`#<span style="background:rgba(255,232,31,0.3); padding:2px 4px;">HoLoGRAM</span>#
+🟦 oN / oFF
+🟥 NExT`,
+"public/holoinfo.JPG"
+);
+const bubble2 = createInfoBubble(
+`#<span style="background:rgba(255,232,31,0.3); padding:2px 4px;"> @</span>#
+Click on 
+SCREEN for 
+PLAY FiLM`,
+"public/screen1_off.webp"
+);
+const bubble3 = createInfoBubble(
+`#<span style="background:rgba(255,232,31,0.3); padding:2px 4px;"> @</span>#
+Click on 
+SCREEN for 
+PLAY FiLM`,
+"public/screen3_off.jpeg"
+);
+const bubble4 = createInfoBubble(
+`⬛ Map
+⬜ Laser
+🟥 ALARM
+🟦 Hyperspace`,
+"public/controlinfo.JPG"
+);
+
+// 3️⃣ Définit les zones 3D autour du joueur
+const zones = [
+    { pos: new THREE.Vector3(0, -6, -5), size: 25, bubble: bubble1 },
+    { pos: new THREE.Vector3(-50, -6, 0), size: 20, bubble: bubble2 },
+    { pos: new THREE.Vector3(50, -6, 0), size: 20, bubble: bubble2 },
+    { pos: new THREE.Vector3(-50, -6, 60), size: 20, bubble: bubble3 },
+    { pos: new THREE.Vector3(50, -6, 60), size: 20, bubble: bubble3 },
+    { pos: new THREE.Vector3(0, -6, 145), size: 30, bubble: bubble4 }
+];
+
+zones.forEach(zone => {
+    const geo = new THREE.BoxGeometry(zone.size*2, zone.size*2, zone.size*2);
+    const mat = new THREE.MeshBasicMaterial({color:0xff0000, wireframe:true});
+    const cube = new THREE.Mesh(geo, mat);
+    cube.position.copy(zone.pos);
+    scene.add(cube);
+});
+
+// 4️⃣ Vérifie si le player est dans une zone
+function checkZones() {
+
+    // cacher toutes les bulles
+    bubble1.style.visibility = "hidden";
+    bubble2.style.visibility = "hidden";
+    bubble3.style.visibility = "hidden";
+    bubble4.style.visibility = "hidden";
+
+    zones.forEach(zone => {
+
+        const distance = player.position.distanceTo(zone.pos);
+
+        if (distance < zone.size) {
+
+            zone.bubble.style.visibility = "visible";
+
+            // position en bas gauche (fixe)
+            zone.bubble.style.left = "20px";
+            zone.bubble.style.bottom = "20px";
+        }
+
+    });
+}
+
+
+//************************************************************************** */
+
+// =====================================================
+// ÉTINCELLES DE COLLISION COQUE - GPU FRIENDLY
+// =====================================================
+
+let lastCollisionTime = 0; // anti-spam
+const COLLISION_COOLDOWN = 0.3; // secondes entre deux impacts
+
+function createCollisionSparks(position, normal) {
+    const count = 20;
+    const geometry = new THREE.BufferGeometry();
+
+    const positions = new Float32Array(count * 3);
+    const velocities = [];
+    const seeds = new Float32Array(count);
+
+    for (let i = 0; i < count; i++) {
+        positions[i*3]   = position.x;
+        positions[i*3+1] = position.y;
+        positions[i*3+2] = position.z;
+
+        // Étincelles qui rebondissent le long de la surface (pas en sphère)
+        // On projette dans le plan de la normale
+        const tangent = new THREE.Vector3(
+            Math.random() - 0.5,
+            Math.random() - 0.5,
+            Math.random() - 0.5
+        ).projectOnPlane(normal).normalize();
+
+        const speed = 2.0 + Math.random() * 5.0;
+        const bounce = 0.5 + Math.random() * 1.5; // ← était 5-15
+
+        velocities.push(new THREE.Vector3(
+            tangent.x * speed + normal.x * bounce,
+            tangent.y * speed + normal.y * bounce,
+            tangent.z * speed + normal.z * bounce
+        ));
+
+        seeds[i] = Math.random();
+    }
+
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geometry.setAttribute('seed',     new THREE.BufferAttribute(seeds, 1));
+
+    const material = new THREE.ShaderMaterial({
+        transparent: true,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+        uniforms: {
+            uOpacity:    { value: 1.0 },
+            uBrightness: { value: 15.0 },
+            time:        { value: 0.0 }
+        },
+        vertexShader: `
+            precision mediump float;
+            attribute float seed;
+            uniform float time;
+            uniform float uOpacity;
+            void main(){
+                vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+                gl_Position = projectionMatrix * mvPosition;
+                float flicker = 0.5 + 0.5 * sin(time * 20.0 + seed * 6.28);
+                gl_PointSize = clamp(15.0 * flicker, 3.0, 20.0);
+            }
+        `,
+        fragmentShader: `
+            precision mediump float;
+            uniform float uOpacity;
+            uniform float uBrightness;
+            void main(){
+                vec2 uv = gl_PointCoord - 0.5;
+                float d = length(uv);
+                float core = exp(-d * d * 8.0);
+                // Couleur : blanc chaud → orange → rouge
+                vec3 color = mix(vec3(1.0, 0.5, 0.1), vec3(1.0, 1.0, 0.8), core);
+                gl_FragColor = vec4(color * uBrightness, core * uOpacity);
+            }
+        `
+    });
+
+    const system = new THREE.Points(geometry, material);
+    system.userData = {
+        life:    1.5,
+        maxLife: 1.5,
+        velocities,
+        count,
+        type: 'collision_sparks'
+    };
+
+    scene.add(system);
+    explosionParticleSystems.push(system); // réutilise le système existant !
+}
+
+
+
+//********************************* */
 
 
 
@@ -3496,19 +4174,39 @@ function checkCapitalShipClick(raycaster) {
 
 
 
-        if (clickedObject.name.includes("HoloTabel_Bottom_Accessories_0")) {
-
-            hologramActive = !hologramActive;
-            hologramTarget = hologramActive ? 1 : 0;
-
-            if (hologramActive) {
-                if (holoOnSound.isPlaying) holoOnSound.stop();
-                holoOnSound.play();
-            } else {
-                if (holoOffSound2.isPlaying) holoOffSound2.stop();
-                holoOffSound2.play();
-            }
-        }
+// Dans ton click handler
+if (clickedObject.name.includes("Table_3_Button_Blue_0")) {
+    hologramActive = !hologramActive;
+    hologramTarget = hologramActive ? 1 : 0;
+    
+    // Active/désactive le chase du bouton rouge
+    chaseActive = hologramActive;
+    
+    // Gère le bouton bleu
+    blueChaseActive = !hologramActive; // Chase actif quand hologramme ÉTEINT
+    
+    if (hologramActive) {
+        // HOLOGRAMME ACTIF
+        holoOnSound.play();
+        
+        // Bouton bleu : allumé fixe
+        setBlueButtonState(true);
+        
+        // Bouton rouge : chase actif (déjà géré par chaseActive)
+        
+    } else {
+        // HOLOGRAMME ÉTEINT
+        holoOffSound.play();
+        
+        // Bouton bleu : retour au chase
+        setBlueButtonState(false);
+        blueChaseTime = 0; // Reset du temps pour redémarrer le cycle
+        
+        // Bouton rouge : éteint
+        resetAllButtons();
+    }
+}
+        
         if (clickedObject.name.includes("Table_2_Button_Blue_0")) {
 
                 open.play();
@@ -3694,23 +4392,60 @@ window.addEventListener("click", onMouseClick);
 });
 
 
-function tryMove(moveVector){
+function tryMove(moveVector) {
+    if (!collisionMeshExterior || !collisionMeshInterior) return;
+    if (collisionShip) collisionShip.updateMatrixWorld(true);
 
-    if(!collisionMesh) return;
+    const origin = player.position.clone();
+    const dir = moveVector.clone().normalize();
+    const moveDistance = moveVector.length();
+    const margin = Math.max(0.5, moveDistance * 0.5);
 
-    const direction = moveVector.clone().normalize();
+    collisionRaycaster.set(origin, dir);
+    collisionRaycaster.far = moveDistance + margin;
 
-    collisionRaycaster.set(player.position, direction);
+    if (isInsideShip) {
+        const hits = collisionRaycaster.intersectObject(collisionMeshInterior, true);
+        if (hits.length > 0 && hits[0].distance < moveDistance + margin) return;
+    } else {
+        const hits = collisionRaycaster.intersectObject(collisionMeshExterior, true);
+        if (hits.length > 0 && hits[0].distance < moveDistance + margin) {
 
-    const intersects = collisionRaycaster.intersectObject(collisionMesh, true);
+            // ✅ IMPACT — rebond + étincelles + son
+            const now = clock.getElapsedTime();
+            if (now - lastCollisionTime > COLLISION_COOLDOWN) {
+                lastCollisionTime = now;
 
-    if (intersects.length === 0 || intersects[0].distance > moveVector.length()) {
-        player.position.add(moveVector);
+                // Point d'impact et normale
+                const hitPoint = hits[0].point;
+                const hitNormal = hits[0].face.normal.clone()
+                    .transformDirection(collisionMeshExterior.matrixWorld)
+                    .normalize();
+
+                // Étincelles
+                createCollisionSparks(hitPoint, hitNormal);
+
+                // Rebond : réfléchit le vecteur de mouvement sur la normale
+                const reflected = moveVector.clone().reflect(hitNormal).multiplyScalar(0.4);
+                player.position.add(reflected);
+
+                // Son
+                if (metalCollisionSound && metalCollisionSound.buffer && !metalCollisionSound.isPlaying) {
+                    metalCollisionSound.play();
+                }
+            }
+            return;
+        }
+
+        const backRay = new THREE.Raycaster();
+        backRay.set(origin, dir.clone().negate());
+        backRay.far = margin;
+        const hitsBack = backRay.intersectObject(collisionMeshExterior, true);
+        if (hitsBack.length > 0) return;
     }
 
+    player.position.add(moveVector);
 }
-
-
 
 
 function updateCamera(dt = 0.016) {
@@ -4022,11 +4757,12 @@ function animate(){
             acceleration
         );
         // direction de la caméra
-    const direction = new THREE.Vector3();
-    camera.getWorldDirection(direction);
-
-    // avancer automatiquement
-    player.position.addScaledVector(direction, currentFlightSpeed * 50 * dt);
+        const direction = new THREE.Vector3();
+        camera.getWorldDirection(direction);
+    
+        // ✅ avancer automatiquement via tryMove pour la collision
+        const flightMove = direction.clone().multiplyScalar(currentFlightSpeed * 50 * dt);
+        tryMove(flightMove);
     } else {
         currentFlightSpeed = walkSpeed;
     }
@@ -4308,6 +5044,15 @@ if (!alarmActive) {
         updateCombat(dt);
     }
     updateCapitalShips(dt);
+
+    
+    updateChaseSmooth(dt);
+
+    updateBlueChaseSmooth(dt);
+
+    updateWhiteButtonsNuanced(dt);
+
+    checkZones();
     
 
     renderer.render(scene,camera);
