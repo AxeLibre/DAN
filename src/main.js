@@ -924,7 +924,7 @@ gltfLoader.load('public/tiefighter.glb', (gltf) => {
     tiefighter7.position.set(-12, 15, -58);
     scene.add(tiefighter7);
 });
-});
+
 
 gltfLoader.load('public/tieinter.glb', (gltf) => {
     tieinterceptor = gltf.scene;
