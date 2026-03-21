@@ -863,7 +863,7 @@ gltfLoader.load('public/cage.glb', (gltf) => {
                 if (obj.isMesh) {
                     obj.material = new THREE.MeshBasicMaterial({
                         color: color,
-                        wireframe: true,
+                        wireframe: false,
                         transparent: true,
                         opacity: 0.3,
                         side: THREE.DoubleSide // Force la détection des deux côtés
@@ -1513,7 +1513,7 @@ const zones = [
 
 zones.forEach(zone => {
     const geo = new THREE.BoxGeometry(zone.size*2, zone.size*2, zone.size*2);
-    const mat = new THREE.MeshBasicMaterial({color:0xff0000, wireframe:true});
+    const mat = new THREE.MeshBasicMaterial({color:0xff0000, wireframe:false});
     const cube = new THREE.Mesh(geo, mat);
     cube.position.copy(zone.pos);
     scene.add(cube);
