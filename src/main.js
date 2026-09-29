@@ -2,6 +2,7 @@ import * as THREE from 'three'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { RGBELoader } from 'https://cdn.jsdelivr.net/npm/three@0.160/examples/jsm/loaders/RGBELoader.js';
+import { LaserBolts, ExplosionFX, CombatHUD, segmentSphere, LASER_GREEN, LASER_RED } from './weapons.js';
 
 let scene, camera, renderer;
 let particleSystem, material;
@@ -100,6 +101,12 @@ let xwingModel = null;      // Modèle X-Wing
 let enemyLasers = [];       // Lasers rouges (X-Wing)
 let friendlyLasers = [];    // Lasers verts (TIE)
 let explosions = [];                    // Explosions vidéo
+// La boucle d'animation tournait 2 fois par image (≈120 fois/s sur un écran 60 Hz).
+// Les vitesses "par image" réglées à l'époque sont conservées via ce facteur.
+const LEGACY_TICK_RATE = 120;
+const FLIGHT_CRUISE_SPEED = 50;   // vitesse du TIE en vol (unités/s)
+const FLIGHT_BOOST_SPEED = 170;   // avec MAJ (Shift) maintenue
+const BATTLE_MIN_Z = 260;         // la bataille reste devant la passerelle (vitres ≈ z 150, canon z 190)
 const listener = new THREE.AudioListener();
 let collisionMeshInterior;
 let collisionMeshExterior;
@@ -111,7 +118,7 @@ window.createRingExplosionComplete = createRingExplosionComplete;
 
 const starJediFont = new FontFace(
     "StarJedi",
-    "url(/DAN/fonts/Starjedi.ttf)"
+    "url(fonts/Starjedi.ttf)" // relatif : marche sur GitHub Pages (/DAN/) ET avec Vite
 );
 
 starJediFont.load().then(function(font){
@@ -172,7 +179,7 @@ playButton.addEventListener("click", () => {
 scene = new THREE.Scene();
 scene.background = new THREE.Color(0x000000);
 
-camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.01, 20000);
+camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 20000);
 camera.position.set(0,0,0);
 camera.rotation.order = "YXZ";
 
@@ -396,9 +403,9 @@ audioLoader2.load('public/bipbip6.WAV', function(buffer) {
 button1 = new THREE.Audio(listener3);
 
 audioLoader2.load('public/bipbip1.WAV', function(buffer) {
-    button2.setBuffer(buffer);
-    button2.setLoop(false);   
-    button2.setVolume(2.0);  
+    button1.setBuffer(buffer);
+    button1.setLoop(false);   
+    button1.setVolume(2.0);  
 });
 
 button3 = new THREE.Audio(listener3);
@@ -1511,13 +1518,16 @@ const zones = [
     { pos: new THREE.Vector3(0, -6, 145), size: 30, bubble: bubble4 }
 ];
 
+const DEBUG_ZONES = false; // true = affiche les zones en rouge
+if (DEBUG_ZONES) {
 zones.forEach(zone => {
     const geo = new THREE.BoxGeometry(zone.size*2, zone.size*2, zone.size*2);
-    const mat = new THREE.MeshBasicMaterial({color:0xff0000, wireframe:false});
+    const mat = new THREE.MeshBasicMaterial({color:0xff0000, wireframe:true});
     const cube = new THREE.Mesh(geo, mat);
     cube.position.copy(zone.pos);
     scene.add(cube);
 });
+}
 
 // 4️⃣ Vérifie si le player est dans une zone
 function checkZones() {
@@ -1879,130 +1889,276 @@ laserLoader.load('public/laser.glb', (gltf) => {
     laserAction.clampWhenFinished = true;
 });
 */
-// 🔊 LASER SOUND (utilise le listener global)
+// ===================================================================
+// SYSTÈMES D'ARMES (voir src/weapons.js)
+// ===================================================================
+const bolts = new LaserBolts(scene);          // tous les tirs laser
+const fx = new ExplosionFX(scene, 12000);     // toutes les explosions GLSL
+const hud = new CombatHUD();                  // réticule / score / radar
+let playerKills = 0;
+let cameraShake = 0;
+let fireHeldMouse = false;
+let fireHeldSpace = false;
 
-const laserSound = new THREE.Audio(listener);
-
-
-
-audioLoader.load('public/laser.mp3', (buffer) => {
-    laserSound.setBuffer(buffer);
-    laserSound.setVolume(0.3);
-});
-
-
-// =================================================================
-// Nouveau LASER 
-// =================================================================
-
-let laserCannon;
-
-gltfLoader.load('public/laser_cannon.glb', (gltf) => {
-
-    laserCannon = gltf.scene;
-    laserCannon.visible = false;
-    laserCannon.position.set(0,-20,165);
-    laserCannon.rotation.y += Math.PI;
-
-
-
-    scene.add(laserCannon);
-
-});
-//-----------------------------------
-
-const aimPlane = new THREE.Plane(
-    new THREE.Vector3(0,0,1),
-    -200
-);
-
-//--------------------------------------
-function shootLaser() {
-    if (!laserCannon) return;
-
-    const geometry = new THREE.CylinderGeometry(1, 1, 20);
-    const material = new THREE.MeshStandardMaterial({
-        color: 0xff0000,
-        emissive: 0xff0000,
-        emissiveIntensity: 5
-    });
-    const laser = new THREE.Mesh(geometry, material);
-    // cylindre vertical par défaut → on l’aligne
-
-
-    laserCannon.updateMatrixWorld();
-    laser.position.setFromMatrixPosition(laserCannon.matrixWorld);
-    
-
-    // direction vers l’avant du canon
-    const aimPoint = new THREE.Vector3();
-    aimPoint.copy(laserCannon.position)
-            .add(laserCannon.getWorldDirection(new THREE.Vector3()).multiplyScalar(1000));
-
-    const direction = new THREE.Vector3().subVectors(aimPoint, laser.position).normalize();
-    laser.userData.velocity = direction.clone().multiplyScalar(20);
-
-    // aligner le laser sur sa trajectoire
-    laser.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0), direction);
-
-    // glow
-    const glowGeometry = new THREE.CylinderGeometry(2, 2, 20);
-
-    const glowMaterial = new THREE.MeshBasicMaterial({
-        color: 0xff5555,
-        transparent: true,
-        opacity: 0.35,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false
-    });
-
-    const glow = new THREE.Mesh(glowGeometry, glowMaterial);
-
-    laser.add(glow);
-
-    // Glow à la pointe du laser
-
-    const spriteMaterial = new THREE.SpriteMaterial({
-        color: 0xff4444,
-        transparent: true,
-        opacity: 0.9,
-        blending: THREE.AdditiveBlending
-    });
-
-    const glowSprite = new THREE.Sprite(spriteMaterial);
-    glowSprite.scale.set(4, 4, 4);
-
-    glowSprite.position.y = 10;
-
-    laser.add(glowSprite);
-
-    // sprite au centre du laser
-
-    const coreGeometry = new THREE.CylinderGeometry(0.4,0.4,20);
-
-    const coreMaterial = new THREE.MeshBasicMaterial({
-        color: 0xffffff,
-        transparent: true,
-        opacity: 0.9,
-        blending: THREE.AdditiveBlending,
-        depthWrite:false
-    });
-
-    const core = new THREE.Mesh(coreGeometry, coreMaterial);
-
-    laser.add(core);
-
-    scene.add(laser);
-    lasers.push(laser);
-
-    const flash = new THREE.PointLight(0xff4444, 15, 40);
-    flash.position.setFromMatrixPosition(laserCannon.matrixWorld);
-    scene.add(flash);
-
-    setTimeout(()=>scene.remove(flash), 50);
+// Petits "pools" de sons : plusieurs tirs rapides peuvent se chevaucher
+function makeVoices(url, volume, count = 4) {
+    const voices = [];
+    for (let i = 0; i < count; i++) voices.push(new THREE.Audio(listener));
+    voices.next = 0;
+    audioLoader.load(url, (buffer) => voices.forEach(v => { v.setBuffer(buffer); v.setVolume(volume); }));
+    return voices;
+}
+function playVoice(voices) {
+    const v = voices[voices.next];
+    voices.next = (voices.next + 1) % voices.length;
+    if (!v.buffer) return;
+    if (v.isPlaying) v.stop();
+    v.play();
 }
 
+// 🔊 LASER SOUND (canon de la passerelle)
+const laserVoices = makeVoices('public/laser.mp3', 0.3);
 
+// La bataille (X-Wing + TIE alliés) est visible avec le canon OU en vol
+function battleOn() {
+    return cannonActive || !isInsideShip;
+}
+
+// =================================================================
+// CANON LASER DE LA PASSERELLE (tourelle)
+// =================================================================
+// Le modèle est découpé en 3 étages :
+//   socle (fixe)  →  fourche (tourne gauche/droite)  →  fût (monte/descend + recul)
+const TURRET = {
+    POSITION: new THREE.Vector3(0, -1, 200),  // axe du canon quand il est sorti
+    HIDDEN_DROP: 45,                          // de combien il descend pour se cacher
+    SPRING: 22,                               // raideur du ressort de sortie
+    DAMPING: 6.5,                             // amortissement (petit rebond en haut)
+    FIRE_INTERVAL: 0.15,                      // secondes entre deux tirs (clic maintenu)
+    BOLT_SPEED: 1100,
+    AIM_DISTANCE: 900,
+    AIM_ASSIST_DEG: 4,                        // aide à la visée (angle de verrouillage)
+    PITCH_MIN: THREE.MathUtils.degToRad(-18),
+    PITCH_MAX: THREE.MathUtils.degToRad(40),
+    YAW_MAX: THREE.MathUtils.degToRad(95),
+    MUZZLE: new THREE.Vector3(0, 0, 29),      // bout du canon (repère du modèle)
+    COLOR: LASER_RED,
+    BASE_PARTS: ['Gear004'],
+    YAW_PARTS: ['Cylindre001', 'Cylindre002']
+};
+
+const turret = {
+    root: null, yaw: null, pitch: null, recoil: null, light: null,
+    target: 0,          // 0 = rentré, 1 = sorti
+    y: 0, vy: 0,        // hauteur relative (ressort)
+    yawAngle: 0, pitchAngle: 0,
+    cooldown: 0, recoilT: 1,
+    lock: null
+};
+let laserCannon; // racine de la tourelle (nom gardé de l'ancienne version)
+
+gltfLoader.load('public/laser_cannon.glb', (gltf) => {
+    const model = gltf.scene;
+    const root = new THREE.Group();
+    const yaw = new THREE.Group();
+    const pitch = new THREE.Group();
+    const recoil = new THREE.Group();
+    root.add(yaw); yaw.add(pitch); pitch.add(recoil);
+
+    // Toutes les pièces sont modélisées autour de l'axe du canon (0,0,0)
+    [...model.children].forEach(part => {
+        if (TURRET.BASE_PARTS.includes(part.name)) root.add(part);
+        else if (TURRET.YAW_PARTS.includes(part.name)) yaw.add(part);
+        else recoil.add(part);
+    });
+
+    // lumière du tir (créée dès le départ : pas de recompilation des shaders au 1er tir)
+    turret.light = new THREE.PointLight(0xff5533, 0, 160, 2);
+    turret.light.position.copy(TURRET.MUZZLE);
+    recoil.add(turret.light);
+
+    root.position.copy(TURRET.POSITION);
+    root.position.y -= TURRET.HIDDEN_DROP;
+    root.visible = false;
+    scene.add(root);
+
+    Object.assign(turret, { root, yaw, pitch, recoil });
+    laserCannon = root;
+});
+
+function setTurret(on) {
+    turret.target = on ? 1 : 0;
+    if (turret.root && on) turret.root.visible = true;
+}
+
+function turretReady() {
+    return !!turret.root && turret.target === 1 && turret.y > 0.9;
+}
+
+// Cherche l'X-Wing le plus proche de la ligne de visée
+function findLockTarget(origin, dir, maxAngleDeg, maxDist) {
+    let best = null;
+    let bestAngle = THREE.MathUtils.degToRad(maxAngleDeg);
+    const v = new THREE.Vector3();
+    for (const e of enemies) {
+        if (!e || !e.visible || e.userData.dead) continue;
+        v.subVectors(e.position, origin);
+        const d = v.length();
+        if (d > maxDist || d < 1) continue;
+        const a = v.divideScalar(d).angleTo(dir);
+        if (a < bestAngle) { bestAngle = a; best = e; }
+    }
+    return best;
+}
+
+// Point de visée anticipé (le laser met du temps à arriver)
+function leadPoint(target, from, speed) {
+    const p = target.position.clone();
+    const vel = target.userData.velocity || new THREE.Vector3();
+    for (let i = 0; i < 2; i++) {
+        const t = p.distanceTo(from) / speed;
+        p.copy(target.position).addScaledVector(vel, t);
+    }
+    return p;
+}
+
+function updateTurret(dt) {
+    if (!turret.root) return;
+
+    // --- sortie / rentrée : ressort amorti (petit rebond mécanique en haut)
+    const acc = TURRET.SPRING * (turret.target - turret.y) - TURRET.DAMPING * turret.vy;
+    turret.vy += acc * dt;
+    turret.y += turret.vy * dt;
+    turret.root.position.y = TURRET.POSITION.y - TURRET.HIDDEN_DROP * (1 - turret.y);
+
+    if (turret.target === 0 && turret.y < 0.02 && Math.abs(turret.vy) < 0.05) {
+        turret.root.visible = false;
+        turret.y = 0; turret.vy = 0;
+    }
+    if (!turret.root.visible) { turret.lock = null; return; }
+
+    // --- visée
+    let desiredYaw = 0, desiredPitch = 0;
+    const aim = new THREE.Vector3();
+    turret.lock = null;
+
+    if (turretReady()) {
+        raycaster.setFromCamera(mouse, camera);
+        const ray = raycaster.ray;
+        aim.copy(ray.direction).multiplyScalar(TURRET.AIM_DISTANCE).add(ray.origin);
+
+        const muzzle = turret.recoil.localToWorld(TURRET.MUZZLE.clone());
+        turret.lock = findLockTarget(ray.origin, ray.direction, TURRET.AIM_ASSIST_DEG, 1600);
+        if (turret.lock) aim.copy(leadPoint(turret.lock, muzzle, TURRET.BOLT_SPEED));
+
+        const local = aim.clone().sub(turret.root.position);
+        desiredYaw = Math.atan2(local.x, local.z);
+        desiredPitch = Math.atan2(local.y, Math.hypot(local.x, local.z));
+    } else {
+        desiredPitch = -0.12; // position de repos, canon légèrement baissé
+    }
+    desiredYaw = THREE.MathUtils.clamp(desiredYaw, -TURRET.YAW_MAX, TURRET.YAW_MAX);
+    desiredPitch = THREE.MathUtils.clamp(desiredPitch, TURRET.PITCH_MIN, TURRET.PITCH_MAX);
+
+    const follow = 1 - Math.exp(-12 * dt);
+    turret.yawAngle += (desiredYaw - turret.yawAngle) * follow;
+    turret.pitchAngle += (desiredPitch - turret.pitchAngle) * follow;
+    turret.yaw.rotation.y = turret.yawAngle;
+    turret.pitch.rotation.x = -turret.pitchAngle;
+
+    // --- recul du fût + flash lumineux
+    turret.recoilT = Math.min(1, turret.recoilT + dt * 5);
+    turret.recoil.position.z = -2.5 * Math.pow(1 - turret.recoilT, 2);
+    turret.light.intensity *= Math.exp(-dt * 25);
+
+    // --- tir
+    turret.cooldown -= dt;
+    if (turretReady() && fireHeldMouse && turret.cooldown <= 0) {
+        turret.cooldown = TURRET.FIRE_INTERVAL;
+        turret.root.updateMatrixWorld(true);
+        const muzzle = turret.recoil.localToWorld(TURRET.MUZZLE.clone());
+        const dir = aim.clone().sub(muzzle).normalize();
+
+        bolts.fire({
+            from: muzzle, dir,
+            speed: TURRET.BOLT_SPEED, length: 26, width: 1.6,
+            color: TURRET.COLOR, range: 1800, team: 'player',
+            hitTest: playerBoltHitTest, onHit: onPlayerBoltHit
+        });
+        fx.muzzle(muzzle, TURRET.COLOR, 6);
+        turret.light.intensity = 900;
+        turret.recoilT = 0;
+        playVoice(laserVoices);
+    }
+}
+
+// -------------------------------------------------------------------
+// Collisions des tirs du joueur (canon ET TIE)
+// -------------------------------------------------------------------
+function hitShipList(list, p0, p1, radius) {
+    let best = null, bestT = 2;
+    for (const s of list) {
+        if (!s || !s.visible || s.userData.dead) continue;
+        const t = segmentSphere(p0, p1, s.position, radius);
+        if (t >= 0 && t < bestT) { bestT = t; best = s; }
+    }
+    return best ? { target: best, t: bestT, point: new THREE.Vector3().lerpVectors(p0, p1, bestT) } : null;
+}
+
+// Les grands vaisseaux sont testés avec une ellipsoïde calée sur chaque partie
+const _inv = new THREE.Matrix4();
+const _a = new THREE.Vector3();
+const _b = new THREE.Vector3();
+const _zero = new THREE.Vector3();
+function capitalPartEllipsoid(part) {
+    if (part.userData.ellipsoid) return part.userData.ellipsoid;
+    part.updateMatrixWorld(true);
+    _inv.copy(part.matrixWorld).invert();
+    const box = new THREE.Box3();
+    part.traverse(m => {
+        if (!m.isMesh) return;
+        if (!m.geometry.boundingBox) m.geometry.computeBoundingBox();
+        box.union(m.geometry.boundingBox.clone().applyMatrix4(m.matrixWorld).applyMatrix4(_inv));
+    });
+    const e = { center: box.getCenter(new THREE.Vector3()), radii: box.getSize(new THREE.Vector3()).multiplyScalar(0.5 * 0.92) };
+    part.userData.ellipsoid = e;
+    return e;
+}
+
+function hitCapital(p0, p1) {
+    let best = null;
+    for (const ship of capitalShips) {
+        for (const part of ship.parts) {
+            if (part.userData.destroyed || !part.visible) continue;
+            const e = capitalPartEllipsoid(part);
+            _inv.copy(part.matrixWorld).invert();
+            _a.copy(p0).applyMatrix4(_inv).sub(e.center).divide(e.radii);
+            _b.copy(p1).applyMatrix4(_inv).sub(e.center).divide(e.radii);
+            const t = segmentSphere(_a, _b, _zero, 1);
+            if (t >= 0 && (!best || t < best.t)) {
+                best = { ship, part, t, point: new THREE.Vector3().lerpVectors(p0, p1, t) };
+            }
+        }
+    }
+    return best;
+}
+
+function playerBoltHitTest(bolt, p0, p1) {
+    const x = hitShipList(enemies, p0, p1, 18);
+    const c = hitCapital(p0, p1);
+    if (x && (!c || x.t <= c.t)) return { kind: 'xwing', ...x };
+    if (c) return { kind: 'capital', ...c };
+    return null;
+}
+
+function onPlayerBoltHit(bolt, hit) {
+    fx.impact(hit.point, bolt.color, hit.kind === 'capital' ? 7 : 4);
+    if (hit.kind === 'xwing') {
+        destroyEnemy(hit.target, true);
+    } else if (hit.kind === 'capital') {
+        hitCapitalShipPart(hit.ship, hit.part, hit.point);
+    }
+}
 
 // =========================================================
 // ALARM     ALARM        ALARM
@@ -2086,60 +2242,58 @@ function stopAlarm() {
 
 
 // ==========================================================
-// TIE FIGHTER LASER    TIE    TIE   TIE   TIE
+// TIE FIGHTER : CANONS DU JOUEUR EN VOL
 // ==========================================================
+// ESPACE (maintenu) ou clic gauche : tirs verts alternés gauche / droite.
+// Les deux canons convergent au centre du réticule ; si un X-Wing est
+// proche du réticule, les tirs visent devant lui (aide à la visée).
 
-// 🔥 TIE LASER GLB
-const tielaserLoader = new GLTFLoader(loadingManager);
+const TIE_GUN = {
+    FIRE_INTERVAL: 0.13,
+    BOLT_SPEED: 900,
+    CONVERGE: 350,                           // distance où les 2 tirs se croisent
+    AIM_ASSIST_DEG: 6,
+    OFFSETS: [                               // position des canons (repère caméra, sous le cockpit)
+        new THREE.Vector3(-4.0, -3.2, -6),
+        new THREE.Vector3( 4.0, -3.2, -6)
+    ],
+    COLOR: LASER_GREEN
+};
+let tieGunSide = 0;
+let tieGunCooldown = 0;
+let tieLock = null;
 
-let tielaserMixer;
-let tielaserAction;
+// 🔊 TIE LASER SOUND
+const tieLaserVoices = makeVoices('public/tielaser.mp3', 0.8);
 
-tielaserLoader.load('./public/tielaser.glb', (gltf) => {
+function updateTieGuns(dt) {
+    tieGunCooldown -= dt;
+    tieLock = null;
+    if (isInsideShip) return;
 
-    const tielaser = gltf.scene;
-    tielaser.scale.set(0.02, 0.02, 0.01);
-    tielaser.position.set(0,-0.5,-1.5)
+    const camPos = camera.getWorldPosition(new THREE.Vector3());
+    const fwd = camera.getWorldDirection(new THREE.Vector3());
+    tieLock = findLockTarget(camPos, fwd, TIE_GUN.AIM_ASSIST_DEG, 1500);
 
-    camera.add(tielaser);
+    if (!(fireHeldSpace || fireHeldMouse) || tieGunCooldown > 0) return;
+    tieGunCooldown = TIE_GUN.FIRE_INTERVAL;
 
+    const from = camera.localToWorld(TIE_GUN.OFFSETS[tieGunSide].clone());
+    tieGunSide = 1 - tieGunSide;
 
-    tielaserMixer = new THREE.AnimationMixer(tielaser);
-    tielaserAction = tielaserMixer.clipAction(gltf.animations[0]);
+    const aim = tieLock
+        ? leadPoint(tieLock, from, TIE_GUN.BOLT_SPEED)
+        : camPos.clone().addScaledVector(fwd, TIE_GUN.CONVERGE);
 
-    tielaserAction.setLoop(THREE.LoopOnce);
-    tielaserAction.clampWhenFinished = true;
-});
-
-// 🔊 TIE LASER SOUND (utilise le listener global)
-
-const tielaserSound = new THREE.Audio(listener);
-
-const tieaudioLoader = new THREE.AudioLoader();
-
-tieaudioLoader.load('public/tielaser.mp3', (buffer) => {
-    tielaserSound.setBuffer(buffer);
-    tielaserSound.setVolume(1);
-});
-
-// ACTION TIR
-
-function handleSpaceAction() {
-
-    console.log("SPACE pressée");
-
-    // exemple : seulement si on est sorti du vaisseau
-    if (!isInsideShip) {
-
-        console.log("Action extérieure déclenchée");
-
-        // 👉 Ici tu mets ton animation plus tard
-        tielaserAction.reset();
-        tielaserAction.play();
-
-        if (tielaserSound.isPlaying) tielaserSound.stop();
-        tielaserSound.play();
-    }
+    bolts.fire({
+        from, dir: aim.sub(from),
+        speed: TIE_GUN.BOLT_SPEED, length: 90, width: 2.6,   // vus de dos : longs et épais
+        color: TIE_GUN.COLOR, range: 1800, team: 'player',
+        hitTest: playerBoltHitTest, onHit: onPlayerBoltHit
+    });
+    fx.muzzle(from, TIE_GUN.COLOR, 1.6);
+    cameraShake = Math.max(cameraShake, 0.12);
+    playVoice(tieLaserVoices);
 }
 
 // ===================================================================
@@ -2194,6 +2348,7 @@ gltfLoader.load('public/xwing.glb', (gltf) => {
 const boxSize = 400;
 
 function updateEnemies(dt) {
+    const k = dt * LEGACY_TICK_RATE;
     // 1. TOUJOURS mettre à jour la physique, même si invisible
     enemies.forEach((enemy, index) => {
         if (!enemy) return;
@@ -2218,7 +2373,7 @@ function updateEnemies(dt) {
         const newPosition = enemy.position.clone().addScaledVector(vel, dt);
         
         // 5. GESTION DE LA DISTANCE
-        if (newPosition.z < 100) {
+        if (newPosition.z < BATTLE_MIN_Z) { // ne jamais entrer dans la passerelle
             newPosition.z = 900 + Math.random() * 300;
             newPosition.x = (Math.random() - 0.5) * 600;
             newPosition.y = (Math.random() - 0.5) * 200;
@@ -2253,14 +2408,14 @@ function updateEnemies(dt) {
                 lookDir
             );
             
-            enemy.userData.targetQuat.slerp(newTargetQuat, 0.05);
-            enemy.quaternion.slerp(enemy.userData.targetQuat, 0.03);
+            enemy.userData.targetQuat.slerp(newTargetQuat, 1 - Math.pow(1 - 0.05, k));
+            enemy.quaternion.slerp(enemy.userData.targetQuat, 1 - Math.pow(1 - 0.03, k));
         }
     });
     
     // 8. GÉRER LA VISIBILITÉ SÉPARÉMENT
     enemies.forEach(enemy => {
-        if (enemy) enemy.visible = cannonActive;
+        if (enemy) enemy.visible = battleOn() && !enemy.userData.dead;
     });
 }
 
@@ -2332,7 +2487,7 @@ function spawnSquadron(count = 8) {
     for(let i = 0; i < count; i++) {
         let enemy = new THREE.Group();
         let model = xwingModel.clone();
-        model.rotation.y = Math.PI;
+        model.rotation.y = 0; // même orientation que spawnEnemy (avant : PI → les X-Wing du départ volaient à l'envers)
         enemy.add(model);
 
         const angle = (i / count) * Math.PI * 2;
@@ -2363,7 +2518,7 @@ function spawnSquadron(count = 8) {
 
 function checkEnemiesPosition() {
     enemies.forEach(enemy => {
-        if (enemy.position.z < 150) { // MODIFIÉ : 50 → 150
+        if (enemy.position.z < BATTLE_MIN_Z + 50) { // MODIFIÉ : 50 → 150
             enemy.userData.velocity.z += 3; // Poussée plus douce
         }
         if (enemy.position.z > 600) { // NOUVEAU : limite supérieure
@@ -2782,25 +2937,12 @@ function createSparkParticles(position, count = 15) { // 30 → 15
 // 4. PRÉSÉLECTIONS D'
 // -------------------------------------------------------------------
 
-function createStandardExplosion(position, scale = 10) { // 20 → 10
-    createVideoExplosion(position, scale);
-    createExplosionParticles(position, { 
-        count: 35, // 70 → 35
-        speed: 70, // 150 → 70
-        life: 1.2 
-    });
-    createSparkParticles(position, 12); // 25 → 12
+function createStandardExplosion(position, scale = 10) {
+    fx.explosion(position, scale * 1.1);
 }
 
-function createRingExplosionComplete(position, scale = 12) { // 20 → 12
-    createVideoExplosion(position, scale);
-    createExplosionParticles(position, { 
-        count: 25, // 50 → 25
-        speed: 60,
-        life: 1.2 
-    });
-    createRingExplosion(position);
-    createSparkParticles(position, 8); // 20 → 8
+function createRingExplosionComplete(position, scale = 12) {
+    fx.explosion(position, scale * 1.3);
 }
 
 // -------------------------------------------------------------------
@@ -2884,25 +3026,24 @@ function updateExplosions(dt) {
 // 6. FONCTIONS DE DESTRUCTION
 // -------------------------------------------------------------------
 
-function destroyEnemy(enemy) {
-    if (!enemy || !enemy.visible) return;
-    
-    const pos = enemy.position.clone();
+function destroyEnemy(enemy, byPlayer = false) {
+    if (!enemy || !enemy.visible || enemy.userData.dead) return;
+    enemy.userData.dead = true;
     enemy.visible = false;
-    
-    createStandardExplosion(pos, 15);
-    
-    setTimeout(() => {
-        scene.remove(enemy);
-        enemies = enemies.filter(e => e !== enemy);
-        
-        // Respawn après un délai, mais SEULEMENT si canon actif
-        if (cannonActive) {
-            setTimeout(() => {
-                spawnEnemy(); // Le nouveau spawn aura la bonne orientation
-            }, 2000);
-        }
-    }, 100);
+
+    fx.explosion(enemy.position.clone(), byPlayer ? 20 : 15);
+
+    if (byPlayer) {
+        playerKills++;
+        hud.setScore(playerKills);
+        if (explosion && explosion.buffer) { explosion.stop(); explosion.play(); }
+    }
+
+    scene.remove(enemy);
+    enemies = enemies.filter(e => e !== enemy);
+
+    // un nouvel X-Wing arrive pour garder la bataille vivante
+    setTimeout(() => spawnEnemy(), 2000);
 }
 
 function destroyEnemyWithRing(enemy) {
@@ -3022,6 +3163,7 @@ function spawnTie() {
 
 function updateTies(dt) {
     if (!tieModel) return;
+    const k = dt * LEGACY_TICK_RATE;
     
     const time = performance.now() * 0.001;
 
@@ -3047,7 +3189,7 @@ function updateTies(dt) {
         const newPosition = tie.position.clone().addScaledVector(vel, dt);
         
         // 4. GESTION DE LA DISTANCE
-        if (newPosition.z < 100) {
+        if (newPosition.z < BATTLE_MIN_Z) { // ne jamais entrer dans la passerelle
             newPosition.z = 900 + Math.random() * 300;
             newPosition.x = (Math.random() - 0.5) * 600;
             newPosition.y = (Math.random() - 0.5) * 200;
@@ -3082,14 +3224,14 @@ function updateTies(dt) {
                 lookDir
             );
             
-            tie.userData.targetQuat.slerp(newTargetQuat, 0.05);
-            tie.quaternion.slerp(tie.userData.targetQuat, 0.03);
+            tie.userData.targetQuat.slerp(newTargetQuat, 1 - Math.pow(1 - 0.05, k));
+            tie.quaternion.slerp(tie.userData.targetQuat, 1 - Math.pow(1 - 0.03, k));
         }
     });
     
     // GÉRER LA VISIBILITÉ SÉPARÉMENT
     friendlyShips.forEach(tie => {
-        if (tie) tie.visible = cannonActive;
+        if (tie) tie.visible = battleOn() && !tie.userData.dead;
     });
 }
 
@@ -3097,98 +3239,53 @@ function updateTies(dt) {
 // 6. SYSTÈME DE LASERS (plus grands)
 // -------------------------------------------------------------------
 
-function createLaser(position, direction, color, isEnemy) {
-    const length = 60;
-    const geometry = new THREE.BufferGeometry();
-    
-    const vertices = new Float32Array([
-        0, 0, 0,
-        0, 0, -length
-    ]);
-    
-    geometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
-    
-    const material = new THREE.LineBasicMaterial({
-        color: color,
-        transparent: true,
-        opacity: 1.0,
-        blending: THREE.AdditiveBlending
+function createLaser(position, direction, color, isEnemy, range = 420) {
+    bolts.fire({
+        from: position, dir: direction,
+        speed: 400, length: 24, width: 1.6, color, range,
+        team: isEnemy ? 'rebel' : 'empire',
+        hitTest: isEnemy ? rebelBoltHitTest : empireBoltHitTest,
+        onHit: isEnemy ? onRebelBoltHit : onEmpireBoltHit
     });
-    
-    const laser = new THREE.Line(geometry, material);
-    
-    laser.position.copy(position);
-    laser.quaternion.setFromUnitVectors(
-        new THREE.Vector3(0, 0, 1),
-        direction.clone().normalize()
-    );
-    
-    laser.userData = {
-        velocity: direction.clone().multiplyScalar(400),
-        life: 1.2,
-        maxLife: 1.2,
-        isEnemy: isEnemy
-    };
-    
-    scene.add(laser);
-    
-    if (isEnemy) {
-        enemyLasers.push(laser);
-    } else {
-        friendlyLasers.push(laser);
+}
+
+// tirs verts des TIE alliés → X-Wing
+function empireBoltHitTest(bolt, p0, p1) {
+    return hitShipList(enemies, p0, p1, 25);
+}
+function onEmpireBoltHit(bolt, hit) {
+    destroyEnemy(hit.target);
+}
+
+// tirs rouges des X-Wing → TIE alliés, ou le joueur quand il vole
+function rebelBoltHitTest(bolt, p0, p1) {
+    const t = hitShipList(friendlyShips, p0, p1, 25);
+    if (t) return { kind: 'tie', ...t };
+    if (!isInsideShip) {
+        const cam = camera.getWorldPosition(new THREE.Vector3());
+        const tt = segmentSphere(p0, p1, cam, 6);
+        if (tt >= 0) return { kind: 'player', t: tt, point: new THREE.Vector3().lerpVectors(p0, p1, tt) };
+    }
+    return null;
+}
+function onRebelBoltHit(bolt, hit) {
+    if (hit.kind === 'tie') destroyTie(hit.target);
+    else playerHit();
+}
+
+// le joueur est touché : pas de "game over", juste un flash et une secousse
+function playerHit() {
+    hud.flashHurt();
+    cameraShake = 1.2;
+    if (metalCollisionSound && metalCollisionSound.buffer) {
+        if (metalCollisionSound.isPlaying) metalCollisionSound.stop();
+        metalCollisionSound.play();
     }
 }
 
 function updateLasers(dt) {
-    if (!cannonActive) {
-        // Nettoyer tous les lasers si canon inactif
-        [...enemyLasers, ...friendlyLasers].forEach(laser => {
-            if (laser) scene.remove(laser);
-        });
-        enemyLasers = [];
-        friendlyLasers = [];
-        return;
-    }
-    
-    // Lasers rouges (X-Wing)
-    enemyLasers = enemyLasers.filter(laser => {
-        laser.position.addScaledVector(laser.userData.velocity, dt);
-        laser.userData.life -= dt * 1.5;
-        laser.material.opacity = laser.userData.life / laser.userData.maxLife;
-        
-        friendlyShips.forEach(tie => {
-            if (tie && tie.visible && laser.position.distanceTo(tie.position) < 25) {
-                destroyTie(tie);
-                laser.userData.life = 0;
-            }
-        });
-        
-        if (laser.userData.life <= 0 || Math.abs(laser.position.z) > 1000) {
-            scene.remove(laser);
-            return false;
-        }
-        return true;
-    });
-    
-    // Lasers verts (TIE)
-    friendlyLasers = friendlyLasers.filter(laser => {
-        laser.position.addScaledVector(laser.userData.velocity, dt);
-        laser.userData.life -= dt * 1.5;
-        laser.material.opacity = laser.userData.life / laser.userData.maxLife;
-        
-        enemies.forEach(enemy => {
-            if (enemy && enemy.visible && laser.position.distanceTo(enemy.position) < 25) {
-                destroyEnemy(enemy);
-                laser.userData.life = 0;
-            }
-        });
-        
-        if (laser.userData.life <= 0 || Math.abs(laser.position.z) > 1000) {
-            scene.remove(laser);
-            return false;
-        }
-        return true;
-    });
+    // bataille cachée → on retire les tirs des IA (les tirs du joueur finissent leur course)
+    if (!battleOn()) bolts.clear(b => b.team === 'rebel' || b.team === 'empire');
 }
 
 // -------------------------------------------------------------------
@@ -3196,7 +3293,7 @@ function updateLasers(dt) {
 // -------------------------------------------------------------------
 
 function updateShooting(dt) {
-    if (!cannonActive) return;
+    if (!battleOn()) return;
     
     const time = performance.now() * 0.001;
     
@@ -3210,7 +3307,15 @@ function updateShooting(dt) {
             enemy.userData.fireRate = 1.5 + Math.random() * 2.5;
         }
         
-        if (time > enemy.userData.nextShot && friendlyShips.length > 0) {
+        const nearPlayer = !isInsideShip && enemy.position.distanceTo(player.position) < 700;
+        if (time > enemy.userData.nextShot && nearPlayer && Math.random() < 0.35) {
+            // En vol, certains X-Wing visent le joueur (avec une bonne marge d'erreur)
+            const aimP = camera.getWorldPosition(new THREE.Vector3()).add(new THREE.Vector3(
+                (Math.random() - 0.5) * 50, (Math.random() - 0.5) * 50, (Math.random() - 0.5) * 50));
+            const direction = aimP.sub(enemy.position).normalize();
+            createLaser(enemy.position.clone().add(direction.clone().multiplyScalar(15)), direction, laserRed, true, 800);
+            enemy.userData.nextShot = time + enemy.userData.fireRate * (0.8 + Math.random() * 0.4);
+        } else if (time > enemy.userData.nextShot && friendlyShips.length > 0) {
             // Choisir une cible aléatoire
             const target = friendlyShips[Math.floor(Math.random() * friendlyShips.length)];
             if (target && target.visible) {
@@ -3257,7 +3362,7 @@ function updateShooting(dt) {
 // -------------------------------------------------------------------
 
 function randomExplosions(dt) {
-    if (!cannonActive) return;
+    if (!battleOn()) return;
     
     const time = performance.now() * 0.001;
     
@@ -3316,24 +3421,16 @@ function randomExplosions(dt) {
 // 9. DESTRUCTION DES TIE
 // -------------------------------------------------------------------
 function destroyTie(tie) {
-    if (!tie || !tie.visible) return;
-    if (!cannonActive) return;
-    
-    const pos = tie.position.clone();
+    if (!tie || !tie.visible || tie.userData.dead) return;
+    if (!battleOn()) return;
+    tie.userData.dead = true;
     tie.visible = false;
-    
-    createStandardExplosion(pos, 15);
-    
-    setTimeout(() => {
-        scene.remove(tie);
-        friendlyShips = friendlyShips.filter(t => t !== tie);
-        
-        if (cannonActive) {
-            setTimeout(() => {
-                spawnTie();
-            }, 3000);
-        }
-    }, 100);
+
+    fx.explosion(tie.position.clone(), 15);
+
+    scene.remove(tie);
+    friendlyShips = friendlyShips.filter(t => t !== tie);
+    setTimeout(() => spawnTie(), 3000);
 }
 // -------------------------------------------------------------------
 // 10. FONCTION DE MISE À JOUR GLOBALE
@@ -3371,7 +3468,7 @@ let capitalShips = [];  // Tableau des vaisseaux complets
 const CAPITAL_SHIP = {
     POSITION: new THREE.Vector3(0, 0, 1500),
     ROTATION_SPEED: 0.1,
-    MAX_HITS_PER_PART: 3,
+    MAX_HITS_PER_PART: 10,       // tirs pour détruire une partie (tir automatique)
     SPAWN_COUNT: 2,
     SPACING: 2000
 };
@@ -3445,6 +3542,8 @@ function createCapitalShip(xOffset = 0) {
         part.userData.originalMaterial = [];
         part.traverse(child => {
             if (child.isMesh) {
+                // matériau propre à chaque vaisseau (sinon ils clignotent tous ensemble)
+                child.material = child.material.clone();
                 child.userData.originalMaterial = child.material.clone();
                 child.userData.hitMaterial = child.material.clone();
                 if (child.userData.hitMaterial.emissive) {
@@ -3463,7 +3562,8 @@ function createCapitalShip(xOffset = 0) {
     // Données du vaisseau
     shipGroup.userData = {
         parts: parts,
-        destroyed: false
+        destroyed: false,
+        xOffset: xOffset
     };
     
     return { group: shipGroup, parts: parts };
@@ -3567,23 +3667,15 @@ function checkCapitalShipHit(laserPosition) {
 
 function hitCapitalShipPart(ship, part, hitPosition) {
     if (part.userData.destroyed) return false;
-    
+
     part.userData.hits++;
-    console.log(`🎯 Hit ${part.userData.hits}/${part.userData.maxHits}`);
-    
-    // Effet de hit
-    part.userData.explosionTime = 0.3;
-    
-    // TEST : Forcer une explosion pour voir
-    console.log("🔥 Tentative d'explosion...");
+    part.userData.explosionTime = 0.3;   // clignotement rouge
     createPartHitExplosion(hitPosition);
-    
+
     if (part.userData.hits >= part.userData.maxHits) {
-        console.log("💀 Destruction !");
         destroyCapitalShipPart(ship, part);
         return true;
     }
-    
     return false;
 }
 
@@ -3592,16 +3684,7 @@ function hitCapitalShipPart(ship, part, hitPosition) {
 // ===================================================================
 
 function createPartHitExplosion(position) {
-    console.log("💥 createPartHitExplosion appelée");
-    
-    // Utiliser DIRECTEMENT vos fonctions qui fonctionnent
-    if (typeof createStandardExplosion === 'function') {
-        createStandardExplosion(position, 15);
-    }
-    
-    if (typeof createSparkParticles === 'function') {
-        createSparkParticles(position, 12);
-    }
+    fx.explosion(position, 9);
 }
 
 // ===================================================================
@@ -3609,8 +3692,8 @@ function createPartHitExplosion(position) {
 // ===================================================================
 
 function destroyCapitalShipPart(ship, part) {
-    console.log("💢 destroyCapitalShipPart appelée");
     part.userData.destroyed = true;
+    if (boom && boom.buffer) { boom.stop(); boom.play(); }
     
     // Position mondiale de la partie
     const worldPos = part.getWorldPosition(new THREE.Vector3());
@@ -3679,6 +3762,14 @@ function destroyWholeCapitalShip(ship) {
         pivotRebel.remove(ship.group);
         capitalShips = capitalShips.filter(s => s !== ship);
     }, 2000);
+
+    // Un nouveau vaisseau sort de l'hyperespace 30 s plus tard
+    setTimeout(() => {
+        const { group, parts } = createCapitalShip(ship.group.userData.xOffset || 0);
+        pivotRebel.add(group);
+        capitalShips.push({ group, parts, hitboxes: [] });
+        fx.explosion(group.getWorldPosition(new THREE.Vector3()), 60, new THREE.Color(0.6, 0.8, 1));
+    }, 30000);
 }
 
 // ===================================================================
@@ -3910,8 +4001,8 @@ particleSystem.scale.set(0.3,0.3,0.3);
 particleSystem.position.set(0,1,0);
 particleSystem.visible = true; // on le laisse visible, on contrôle juste l'opacité
 scene.add(particleSystem);
-
-animate();
+// (la boucle animate() est déjà lancée en bas du fichier : l'appeler ici
+//  créait une 2e boucle et tout tournait deux fois par image)
 }
 
 
@@ -3943,14 +4034,6 @@ objectsToFade.forEach(obj => {
 // =====================================================================================================================
 // DEPLACEMENT                      PLAYER                                                  CLAVIER
 // =====================================================================================================================
-window.addEventListener('pointermove', e => {
-    const x = (e.clientX/window.innerWidth)*2 - 1;
-    const y = -(e.clientY/window.innerHeight)*2 + 1;
-    raycaster.setFromCamera({x,y}, camera);
-    const hit = new THREE.Vector3();
-    raycaster.ray.intersectPlane(plane, hit);
-    mouse.copy(hit);
-});
 
 // Crée un player pour gérer la rotation globale
 const player = new THREE.Group();
@@ -4041,21 +4124,26 @@ document.addEventListener('mousemove', (e) => {
     }
 });
 
-// TIR TIE FIGHTER avec SPACE-BAR
-
-let spacePressed = false;
+// TIR avec SPACE-BAR (maintenue) + BOOST avec MAJ en vol
+let boostHeld = false;
 
 window.addEventListener("keydown", (event) => {
-    if (event.code === "Space" && !spacePressed) {
-        spacePressed = true;
-        handleSpaceAction();
+    if (event.code === "Space") {
+        event.preventDefault();
+        fireHeldSpace = true;
     }
+    if (event.key === "Shift") boostHeld = true;
 });
 
 window.addEventListener("keyup", (event) => {
-    if (event.code === "Space") {
-        spacePressed = false;
-    }
+    if (event.code === "Space") fireHeldSpace = false;
+    if (event.key === "Shift") boostHeld = false;
+});
+
+window.addEventListener("blur", () => {
+    fireHeldSpace = false;
+    fireHeldMouse = false;
+    boostHeld = false;
 });
 
 
@@ -4073,91 +4161,7 @@ renderer.domElement.addEventListener('click', (event) => {
         -((event.clientY - rect.top) / rect.height) * 2 + 1
     );
 
-    if (cannonActive && !ignoreNextShot) {
-
-        setTimeout(() => {
-
-            if (!cannonActive) return; // sécurité si le canon vient d'être éteint
-
-            laserSound.stop();
-            shootLaser();
-            laserSound.play();
-
-        }, 80); // petit délai
-
-    }
-
     raycaster.setFromCamera(mouse, camera);
-
-    // =============== CAPITAL SHIPS ===============
-checkCapitalShipClick(raycaster);
-// =============================================
-
-    const hits = raycaster.intersectObjects(enemies, true);
-
-    if(hits.length > 0){
-
-        let enemy = hits[0].object;
-
-        while(enemy.parent && !enemies.includes(enemy)){
-            enemy = enemy.parent;
-        }
-
-        destroyEnemyWithRing(enemy);
-        explosion.stop()
-        explosion.play()
-
-    }
-
-
-
-// ===================================================================
-// VÉRIFICATION DES CLICS SUR LES CAPITAL SHIPS
-// ===================================================================
-
-function checkCapitalShipClick(raycaster) {
-    // Récupérer toutes les parties visibles des capital ships
-    const allParts = [];
-    capitalShips.forEach(ship => {
-        ship.parts.forEach(part => {
-            if (part.visible && !part.userData.destroyed) {
-                allParts.push(part);
-            }
-        });
-    });
-    
-    if (allParts.length === 0) return false;
-    
-    // Tester les intersections
-    const intersects = raycaster.intersectObjects(allParts, true); // true pour les enfants
-    
-    if (intersects.length > 0) {
-        // Prendre la première intersection
-        const hit = intersects[0];
-        const hitPart = hit.object;
-        
-        // Remonter jusqu'à la partie parente (le groupe)
-        let partGroup = hitPart;
-        while (partGroup.parent && !partGroup.userData?.maxHits) {
-            partGroup = partGroup.parent;
-        }
-        
-        // Trouver à quel ship et quelle partie appartient cet objet
-        for (let ship of capitalShips) {
-            for (let part of ship.parts) {
-                if (part === partGroup || part.children.includes(hitPart)) {
-                    // Touché !
-                    console.log("🎮 Clic détecté sur capital ship !");
-                    hitCapitalShipPart(ship, part, hit.point);
-                    return true;
-                }
-            }
-        }
-    }
-    
-    return false;
-}
-
 
     const intersects = raycaster.intersectObjects(worldGroup.children, true);
     if(intersects.length > 0){
@@ -4199,7 +4203,7 @@ if (clickedObject.name.includes("Table_3_Button_Blue_0")) {
         
     } else {
         // HOLOGRAMME ÉTEINT
-        holoOffSound.play();
+        holoOffSound2.play();
         
         // Bouton bleu : retour au chase
         setBlueButtonState(false);
@@ -4227,55 +4231,14 @@ if (clickedObject.name.includes("Table_3_Button_Blue_0")) {
 
 if (clickedObject.name.includes("Side_Control_Panels_Button_White_0001")) {
 
-    ignoreNextShot = true;
     cannonActive = !cannonActive;
+    setTurret(cannonActive);
+    fireHeldMouse = false;
 
-    setTimeout(() => {
-        ignoreNextShot = false;
-    }, 100);
+    if (cannonActive) laseron.play();
+    else laseroff.play();
 
-    if (cannonActive) {
-        // ACTIVER LE CANON
-        laserCannon.visible = true;     
-        cannonTargetY = cannonVisibleY;
-        laseron.play();
-
-        cursorDiv.style.display = 'block';
-
-        
-        // RENDRE LES VAISSEAUX VISIBLES (ils existent déjà et ont bougé !)
-        enemies.forEach(enemy => {
-            if (enemy) enemy.visible = true;
-        });
-        
-        friendlyShips.forEach(tie => {
-            if (tie) tie.visible = true;
-        });
-
-    } else {
-        // DÉSACTIVER LE CANON
-        laserCannon.visible = false;
-        cannonTargetY = cannonHiddenY;
-        laseroff.play();
-
-        cursorDiv.style.display = 'none';
-        
-        // Cacher les vaisseaux
-        enemies.forEach(enemy => {
-            if (enemy) enemy.visible = false;
-        });
-        
-        friendlyShips.forEach(tie => {
-            if (tie) tie.visible = false;
-        });
-        
-        // Nettoyer les lasers
-        [...enemyLasers, ...friendlyLasers].forEach(laser => {
-            if (laser) scene.remove(laser);
-        });
-        enemyLasers = [];
-        friendlyLasers = [];
-    }
+    refreshHud();
 }
 
         if (clickedObject.name.includes("Side_Control_Panels_Button_Red_0001")) {
@@ -4346,7 +4309,7 @@ if (clickedObject.name.includes("Side_Control_Panels_Button_White_0001")) {
         }
 
         
-        const shipHit = raycaster.intersectObject(tiePlayer, true);
+        const shipHit = tiePlayer ? raycaster.intersectObject(tiePlayer, true) : [];
 
         if (shipHit.length > 0) {
             
@@ -4367,32 +4330,82 @@ if (clickedObject.name.includes("Side_Control_Panels_Button_White_0001")) {
             console.log("Nouveau vaisseau :", shipIndex);
         }
             
-        const mouse = new THREE.Vector2();
+            }
+});
 
-        function onMouseClick(event) {
-            // Convertir la position de la souris en coordonnées normalisées [-1,1]
-            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
-            mouse.y = - (event.clientY / window.innerHeight) * 2 + 1;
+// Écrans vidéo cliquables (enregistré UNE seule fois)
+function onMouseClick(event) {
+    const m = new THREE.Vector2(
+        (event.clientX / window.innerWidth) * 2 - 1,
+        -(event.clientY / window.innerHeight) * 2 + 1
+    );
+    raycaster.setFromCamera(m, camera);
 
-            raycaster.setFromCamera(mouse, camera);
-
-            const intersects = raycaster.intersectObjects(clickableObjects, true);
-
-            if (intersects.length > 0) {
-                const clickedObject = intersects[0].object;
-
-            screens.forEach(screenObj => {
+    const intersects = raycaster.intersectObjects(clickableObjects, true);
+    if (intersects.length > 0) {
+        const clickedObject = intersects[0].object;
+        screens.forEach(screenObj => {
             if (clickedObject === screenObj.mesh) {
                 toggleScreen(screenObj);
             }
         });
-                        }
-        }
-
+    }
+}
 window.addEventListener("click", onMouseClick);
 
-            }
+// =====================================================================================================================
+// TIR À LA SOURIS (maintenir le clic = tir automatique)
+// =====================================================================================================================
+
+// Un clic sur la console / un bouton ne doit pas déclencher de tir
+function isUiClick() {
+    raycaster.setFromCamera(mouse, camera);
+    const hit = raycaster.intersectObjects(worldGroup.children, true)[0];
+    return !!hit && hit.distance < 45;
+}
+
+renderer.domElement.addEventListener('pointerdown', (event) => {
+    if (event.button !== 0) return;
+    const rect = renderer.domElement.getBoundingClientRect();
+    mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+    mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+    if (!isInsideShip) { fireHeldMouse = true; return; }   // en vol
+    if (turretReady() && !isUiClick()) fireHeldMouse = true; // au canon
 });
+
+window.addEventListener('pointerup', () => { fireHeldMouse = false; });
+
+// Affichage du HUD selon la situation
+function refreshHud() {
+    const turretMode = isInsideShip && cannonActive;
+    hud.show(!isInsideShip ? 'flight' : (turretMode ? 'turret' : null));
+    cursorDiv.style.display = turretMode ? 'block' : 'none';
+    renderer.domElement.style.cursor = turretMode || !isInsideShip ? 'none' : '';
+}
+
+let radarTimer = 0;
+const _proj = new THREE.Vector3();
+function updateCombatHud(dt) {
+    if (!hud.mode) return;
+
+    const lock = hud.mode === 'flight' ? tieLock : turret.lock;
+    if (lock) {
+        _proj.copy(lock.position).project(camera);
+        const onScreen = _proj.z < 1 && Math.abs(_proj.x) < 1 && Math.abs(_proj.y) < 1;
+        hud.showLock((_proj.x + 1) / 2 * window.innerWidth, (1 - _proj.y) / 2 * window.innerHeight, onScreen);
+    } else {
+        hud.showLock(0, 0, false);
+    }
+
+    radarTimer -= dt;
+    if (radarTimer <= 0) {
+        radarTimer = 0.1;
+        const xs = enemies.filter(e => e.visible).map(e => e.position);
+        const caps = capitalShips.map(s => s.group.getWorldPosition(new THREE.Vector3()));
+        hud.drawRadar(player.position, player.rotation.y, xs, caps, hud.mode === 'flight' ? 1400 : 2200);
+    }
+}
 
 
 function tryMove(moveVector) {
@@ -4451,31 +4464,50 @@ function tryMove(moveVector) {
 }
 
 
-function updateCamera(dt = 0.016) {
+let flightPitch = 0;
+let pitchVelocity = 0;
+let flightRoll = 0;
+const FLIGHT_PITCH_SPEED = 1.1;   // rad/s
+const FLIGHT_PITCH_LIMIT = 1.25;  // ~70°
 
-    // accélération
-    if (keys.ArrowRight) rotationVelocity -= rotationAcceleration * dt;
-    if (keys.ArrowLeft)  rotationVelocity += rotationAcceleration * dt;
+function updateCamera(dt = 1 / LEGACY_TICK_RATE) {
+    const k = dt * LEGACY_TICK_RATE;
 
-    // clamp vitesse max
+    // gauche / droite (même sensation qu'avant, quel que soit l'écran)
+    if (keys.ArrowRight) rotationVelocity -= rotationAcceleration * 0.016 * k;
+    if (keys.ArrowLeft)  rotationVelocity += rotationAcceleration * 0.016 * k;
     rotationVelocity = THREE.MathUtils.clamp(rotationVelocity, -maxRotationSpeed, maxRotationSpeed);
+    player.rotation.y += rotationVelocity * k;
+    rotationVelocity *= Math.pow(rotationDamping, k);
 
-    // appliquer rotation
-    player.rotation.y += rotationVelocity;
+    if (playerState === "flight") {
+        // EN VOL : haut / bas = monter / descendre
+        const input = (keys.ArrowUp ? 1 : 0) - (keys.ArrowDown ? 1 : 0);
+        pitchVelocity += (input * FLIGHT_PITCH_SPEED - pitchVelocity) * (1 - Math.exp(-6 * dt));
+        flightPitch = THREE.MathUtils.clamp(flightPitch + pitchVelocity * dt, -FLIGHT_PITCH_LIMIT, FLIGHT_PITCH_LIMIT);
 
-    // friction / inertie
-    rotationVelocity *= rotationDamping;
+        // le TIE s'incline dans les virages
+        const rollTarget = THREE.MathUtils.clamp(rotationVelocity * 10, -0.45, 0.45);
+        flightRoll += (rollTarget - flightRoll) * (1 - Math.exp(-5 * dt));
+    } else {
+        // À PIED : retour à l'horizontale + avancer / reculer
+        const back = 1 - Math.exp(-6 * dt);
+        flightPitch += (0 - flightPitch) * back;
+        flightRoll += (0 - flightRoll) * back;
+        pitchVelocity = 0;
 
-    // déplacement
-    let moveVector = new THREE.Vector3();
-    const currentSpeed = (playerState === "flight") ? flightSpeed : walkSpeed;
-    if (keys.ArrowUp)    moveVector.z -= currentSpeed;
-    if (keys.ArrowDown)  moveVector.z += currentSpeed;
+        let moveVector = new THREE.Vector3();
+        if (keys.ArrowUp)    moveVector.z -= walkSpeed * k;
+        if (keys.ArrowDown)  moveVector.z += walkSpeed * k;
 
-    if (moveVector.length() > 0) {
-        moveVector.applyQuaternion(player.quaternion);
-        tryMove(moveVector);
+        if (moveVector.length() > 0) {
+            moveVector.applyQuaternion(player.quaternion);
+            tryMove(moveVector);
+        }
     }
+
+    camera.rotation.x = flightPitch;
+    camera.rotation.z = flightRoll;
 }
 
 
@@ -4538,11 +4570,11 @@ scene.add(trigger);
 
 let previousDoorState = false;
 
-function updateDoors() {
+function updateDoors(k = 1) {
 
     if(!doorleft || !doorright) return;
 
-    const speed = 0.05;
+    const speed = 1 - Math.pow(1 - 0.05, k);
     const openOffset = 12;
 
     const targetLeftX  = doorState ? 12 - openOffset : -12;
@@ -4577,12 +4609,12 @@ function updateDoors() {
 
 function enableFlightMode() {
     playerState = "flight";
-    tielaserAction.visible = true;
+    refreshHud();
 }
 
 function enableWalkMode() {
     playerState = "walk";
-    tielaserAction.visible = false;
+    refreshHud();
 }
 
 // SON
@@ -4712,7 +4744,7 @@ function onButtonClick() {
 
 
 setInterval(() => {
-    if (!cannonActive) return;
+    if (!battleOn()) return;
     
     // Vérifier les X-Wing
     enemies.forEach(enemy => {
@@ -4751,23 +4783,21 @@ function animate(){
 
     requestAnimationFrame(animate);
 
-    const dt = clock.getDelta();
+    const dt = Math.min(clock.getDelta(), 0.1);  // évite un saut énorme après un changement d'onglet
+    const k = dt * LEGACY_TICK_RATE;             // équivalent "nombre d'images" de l'ancienne boucle
 
     if (playerState === "flight") {
-        currentFlightSpeed = THREE.MathUtils.lerp(
-            currentFlightSpeed,
-            maxFlightSpeed,
-            acceleration
-        );
+        const targetSpeed = boostHeld ? FLIGHT_BOOST_SPEED : FLIGHT_CRUISE_SPEED;
+        currentFlightSpeed += (targetSpeed - currentFlightSpeed) * (1 - Math.exp(-2.5 * dt));
         // direction de la caméra
         const direction = new THREE.Vector3();
         camera.getWorldDirection(direction);
-    
+
         // ✅ avancer automatiquement via tryMove pour la collision
-        const flightMove = direction.clone().multiplyScalar(currentFlightSpeed * 50 * dt);
+        const flightMove = direction.clone().multiplyScalar(currentFlightSpeed * dt);
         tryMove(flightMove);
     } else {
-        currentFlightSpeed = walkSpeed;
+        currentFlightSpeed = 12; // le TIE repart doucement à la sortie du hangar
     }
 
     if (!material) return;
@@ -4788,10 +4818,10 @@ function animate(){
     mixers.forEach(m => m.update(dt));
 
     // rotation du pivot autour de Y
-    pivot.rotation.y -= 0.001; // vitesse de rotation
+    pivot.rotation.y -= 0.001 * k; // vitesse de rotation
     material.uniforms.time.value += dt;
     material.uniforms.globalRotation.value += dt * 0.2;
-    updateCamera();
+    updateCamera(dt);
     
     if (doorleft && doorright) {
 
@@ -4805,7 +4835,7 @@ function animate(){
 
     if (isPlaying && screenMaterial && video) {
     if (fadeState === "fadeIn") {
-        screenMaterial.opacity += fadeSpeed;
+        screenMaterial.opacity += fadeSpeed * k;
         if (screenMaterial.opacity >= 1) {
             screenMaterial.opacity = 1;
             fadeState = "playing";
@@ -4816,7 +4846,7 @@ function animate(){
         
     }
     else if (fadeState === "fadeOut") {
-        screenMaterial.opacity -= fadeSpeed;
+        screenMaterial.opacity -= fadeSpeed * k;
         if (screenMaterial.opacity <= 0) {
             boom.play();
             screenMaterial.opacity = 0;
@@ -4834,7 +4864,7 @@ function animate(){
 // 🎬 Fade des objets 3D
 if (objectFade === "fadeOut") {
 
-    objectOpacity -= objectFadeSpeed;
+    objectOpacity -= objectFadeSpeed * k;
 
     objectsToFade.forEach(obj => {
 
@@ -4859,7 +4889,7 @@ if (objectFade === "fadeOut") {
 
 else if (objectFade === "fadeIn") {
 
-    objectOpacity += objectFadeSpeed;
+    objectOpacity += objectFadeSpeed * k;
 
     objectsToFade.forEach(obj => {
 
@@ -4892,7 +4922,7 @@ else if (objectFade === "fadeIn") {
     }
 }
 }
-    updateDoors();
+    updateDoors(k);
     
 
     // ===== Hologram Fade =====
@@ -4900,7 +4930,7 @@ else if (objectFade === "fadeIn") {
         hologramOpacity = THREE.MathUtils.lerp(
             hologramOpacity,
             hologramTarget,
-            hologramFadeSpeed
+            1 - Math.pow(1 - hologramFadeSpeed, k)
         );
 
     material.uniforms.uOpacity.value = hologramOpacity;
@@ -4909,7 +4939,7 @@ else if (objectFade === "fadeIn") {
 
     // ======= Levitation TIE PLAYER =====================
 
-    if (baseY === null) baseY = tiePlayer.position.y;
+    if (baseY === null && tiePlayer) baseY = tiePlayer.position.y;
 
     const t = levitationClock.getElapsedTime();
 
@@ -4922,55 +4952,14 @@ else if (objectFade === "fadeIn") {
 
     updateinout();
 
-   if (tielaserMixer) {
-        tielaserMixer.update(dt);
-    };
-
-
-    if (cannonActive && laserCannon) {
-
-    raycaster.setFromCamera(mouse, camera);
-
-    const target = new THREE.Vector3();
-
-    target.copy(raycaster.ray.direction)
-          .multiplyScalar(500)
-          .add(raycaster.ray.origin);
-
-    laserCannon.lookAt(target);
-
+    // retour à hauteur de marche une fois rentré dans le vaisseau
+    if (isInsideShip) {
+        player.position.y += (3.5 - player.position.y) * (1 - Math.exp(-5 * dt));
     }
 
-    lasers.forEach((laser, i) => {
-
-    laser.position.add(laser.userData.velocity);
-
-    if (laser.position.length() > 3000) {
-
-        scene.remove(laser);
-        lasers.splice(i,1);
-
-    }
-
-    });
-
-    if (laserCannon) {
-
-        if (laserCannon.position.y < cannonTargetY) {
-            laserCannon.position.y += cannonSpeed;
-        }
-
-        if (laserCannon.position.y > cannonTargetY) {
-            laserCannon.position.y -= cannonSpeed;
-        }
-
-        // cacher seulement quand il est complètement descendu
-        if (!cannonActive && laserCannon.position.y <= cannonHiddenY + 0.1) {
-            laserCannon.visible = false;
-        }
-
-    }
-
+    // ===== ARMES & EFFETS =====
+    updateTurret(dt);
+    updateTieGuns(dt);
 
 /*
     if (laserMixer) {
@@ -5026,8 +5015,6 @@ if (!alarmActive) {
 
         // Micro pitch avant/arrière
         cockpit.rotation.x = Math.sin(cockpitFloatTime * 1.5) * 0.005;
-
-        console.log(cockpitFloatTime);
     }
 
 
@@ -5048,6 +5035,19 @@ if (!alarmActive) {
     }
     updateCapitalShips(dt);
 
+    bolts.update(dt);
+    fx.update(dt, camera, renderer);
+    updateCombatHud(dt);
+
+    // secousse de caméra (tir / impact)
+    if (cameraShake > 0.01) {
+        camera.position.set((Math.random() - 0.5) * cameraShake, (Math.random() - 0.5) * cameraShake, 0);
+        cameraShake *= Math.exp(-dt * 10);
+    } else if (cameraShake > 0) {
+        cameraShake = 0;
+        camera.position.set(0, 0, 0);
+    }
+
     
     updateChaseSmooth(dt);
 
@@ -5064,3 +5064,4 @@ if (!alarmActive) {
 
 // Démarrer l'animation
 requestAnimationFrame(animate);
+
