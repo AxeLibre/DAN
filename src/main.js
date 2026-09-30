@@ -606,9 +606,9 @@ loader4.load('public/star_executor_web.glb', (gltf) => {
         if (o.isMesh && /^MainHull/.test(o.name)) exteriorColliders.push(o);
     });
     towerExtras.forEach(o => { o.visible = false; });
+    executor.updateMatrixWorld(true);
+    hangarCut.toLocal.value.copy(executor.matrixWorld).invert();
     if (executorTower) {
-        executor.updateMatrixWorld(true);
-        hangarCut.toLocal.value.copy(executor.matrixWorld).invert();
         executorTower.traverse(o => {
             if (!o.isMesh) return;
             exteriorColliders.push(o);
@@ -618,7 +618,64 @@ loader4.load('public/star_executor_web.glb', (gltf) => {
         });
         executorTower.visible = false;
     }
+
+    // texture de coque projetée (les UV n'ont pas été dépliés après la décimation)
+    const done = new Set();
+    executor.traverse(o => {
+        if (!o.isMesh || !/ScratchedMetal/.test(o.material.name) || done.has(o.material)) return;
+        applyTriplanar(o.material);
+        done.add(o.material);
+    });
 });
+
+// -------------------------------------------------------------------
+// Texture "triplanaire" de la coque de l'Executor
+// -------------------------------------------------------------------
+// Le modèle décimé n'a pas d'UV dépliés : la texture de métal serait étirée n'importe
+// comment. À la place, le shader la projette selon les 3 axes (dessus / côtés / avant)
+// et mélange d'après l'orientation de chaque face. Pas besoin d'UV, taille constante.
+const EXECUTOR_TEX_SIZE = 8;   // taille d'un carreau de texture, en unités du modèle (×10 dans la scène)
+
+function applyTriplanar(material) {
+    const previous = material.onBeforeCompile;
+    const previousKey = material.customProgramCacheKey ? material.customProgramCacheKey() : '';
+    material.onBeforeCompile = (shader, renderer) => {
+        if (previous) previous(shader, renderer);
+        shader.uniforms.uTriToLocal = hangarCut.toLocal;          // monde → repère de l'Executor
+        shader.uniforms.uTriScale = { value: 1 / EXECUTOR_TEX_SIZE };
+        shader.vertexShader = shader.vertexShader
+            .replace('#include <common>', '#include <common>\nuniform mat4 uTriToLocal;\nvarying vec3 vTriPos;\nvarying vec3 vTriN;')
+            .replace('#include <defaultnormal_vertex>', '#include <defaultnormal_vertex>\nvTriN = normalize(mat3(uTriToLocal) * mat3(modelMatrix) * objectNormal);')
+            .replace('#include <begin_vertex>', '#include <begin_vertex>\nvTriPos = (uTriToLocal * modelMatrix * vec4(transformed, 1.0)).xyz;');
+        shader.fragmentShader = shader.fragmentShader
+            .replace('#include <common>', '#include <common>\nuniform float uTriScale;\nvarying vec3 vTriPos;\nvarying vec3 vTriN;')
+            .replace('#include <map_fragment>', `
+                vec3 triW = pow(abs(normalize(vTriN)), vec3(4.0));
+                triW /= (triW.x + triW.y + triW.z);
+                vec3 triP = vTriPos * uTriScale;
+                #ifdef USE_MAP
+                    diffuseColor *= texture2D(map, triP.zy) * triW.x
+                                  + texture2D(map, triP.xz) * triW.y
+                                  + texture2D(map, triP.xy) * triW.z;
+                #endif`)
+            .replace('#include <roughnessmap_fragment>', `
+                float roughnessFactor = roughness;
+                #ifdef USE_ROUGHNESSMAP
+                    roughnessFactor *= texture2D(roughnessMap, triP.zy).g * triW.x
+                                     + texture2D(roughnessMap, triP.xz).g * triW.y
+                                     + texture2D(roughnessMap, triP.xy).g * triW.z;
+                #endif`)
+            .replace('#include <metalnessmap_fragment>', `
+                float metalnessFactor = metalness;
+                #ifdef USE_METALNESSMAP
+                    metalnessFactor *= texture2D(metalnessMap, triP.zy).b * triW.x
+                                     + texture2D(metalnessMap, triP.xz).b * triW.y
+                                     + texture2D(metalnessMap, triP.xy).b * triW.z;
+                #endif`);
+    };
+    material.customProgramCacheKey = () => previousKey + '|triplanar';
+    material.needsUpdate = true;
+}
 
 // -------------------------------------------------------------------
 // Sortie du hangar à travers l'arrière de la tourelle
