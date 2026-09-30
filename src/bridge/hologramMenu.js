@@ -19,26 +19,25 @@ const CSS = `
     box-sizing: border-box; width: 216px; max-height: calc(100vh - 40px); overflow-y: auto; overflow-x: hidden;
     padding: 14px 12px 14px;
     font-family: Orbitron, 'Segoe UI', sans-serif; color: #cfefff;
-    background: linear-gradient(180deg, rgba(6, 22, 40, .82), rgba(2, 10, 20, .9));
+    background: linear-gradient(180deg, rgba(6, 22, 40, .9), rgba(2, 10, 20, .94));
     border: 1px solid rgba(90, 200, 255, .55); border-radius: 14px;
     box-shadow: 0 0 30px rgba(40, 160, 255, .35), inset 0 0 40px rgba(40, 160, 255, .12);
-    backdrop-filter: blur(6px);
     transform: translate(130%, -50%); opacity: 0; pointer-events: none;
     transition: transform .6s cubic-bezier(.2, .9, .2, 1), opacity .4s ease;
     overflow: hidden;
 }
 #holo-menu.open { transform: translate(0, -50%); opacity: 1; pointer-events: auto; }
 #holo-menu::-webkit-scrollbar { width: 0; }
-#holo-menu::before {                                   /* balayage lumineux */
-    content: ''; position: absolute; left: -40%; top: 0; width: 40%; height: 100%; z-index: 1;
-    background: linear-gradient(90deg, transparent, rgba(120, 220, 255, .12), transparent);
-    animation: holo-sweep 4.5s linear infinite; pointer-events: none;
+#holo-menu::before {                                   /* balayage lumineux (déplacement seul : pas de redessin) */
+    content: ''; position: absolute; left: 0; top: 0; width: 100%; height: 40%; z-index: 1;
+    background: linear-gradient(180deg, transparent, rgba(120, 220, 255, .1), transparent);
+    transform: translateY(-110%); animation: holo-sweep 4.5s linear infinite; pointer-events: none;
 }
 #holo-menu::after {                                    /* lignes de balayage */
     content: ''; position: absolute; inset: 0; pointer-events: none; opacity: .35;
     background: repeating-linear-gradient(180deg, rgba(120, 220, 255, .08) 0 1px, transparent 1px 3px);
 }
-@keyframes holo-sweep { to { left: 110%; } }
+@keyframes holo-sweep { to { transform: translateY(260%); } }
 #holo-menu .head { display: flex; flex-direction: column; align-items: center; gap: 4px; margin-bottom: 12px; }
 #holo-menu .title { font-size: 13px; font-weight: 700; letter-spacing: .35em; color: #8fdcff;
     text-shadow: 0 0 10px rgba(60, 190, 255, .9); }
@@ -55,9 +54,11 @@ const CSS = `
 #holo-menu .card:hover { transform: translateX(-4px); background: rgba(40, 130, 200, .3);
     border-color: rgba(140, 225, 255, .8); box-shadow: 0 0 16px rgba(60, 190, 255, .6); }
 #holo-menu .card.active { border-color: #7fe2ff; background: rgba(40, 150, 230, .32);
-    box-shadow: 0 0 18px rgba(80, 210, 255, .8), inset 0 0 14px rgba(80, 210, 255, .35);
-    animation: holo-card-in .45s forwards, holo-active 1.6s ease-in-out infinite .45s; }
-@keyframes holo-active { 50% { box-shadow: 0 0 26px rgba(80, 210, 255, 1), inset 0 0 20px rgba(80, 210, 255, .5); } }
+    box-shadow: 0 0 18px rgba(80, 210, 255, .8), inset 0 0 14px rgba(80, 210, 255, .35); }
+#holo-menu .card.active::after {                       /* pulsation (opacité seule : pas de redessin) */
+    content: ''; position: absolute; inset: -1px; border-radius: 8px; pointer-events: none;
+    box-shadow: 0 0 26px rgba(80, 210, 255, .9); opacity: 0; animation: holo-active 1.6s ease-in-out infinite; }
+@keyframes holo-active { 50% { opacity: 1; } }
 #holo-menu canvas { width: 72px; height: 72px; display: block; margin: 0 auto; }
 #holo-menu .label { font-size: 8px; letter-spacing: .06em; text-transform: uppercase; line-height: 1.2;
     min-height: 2.4em; display: flex; align-items: center; justify-content: center; margin-top: 2px; }   /* noms longs sur 2 lignes */

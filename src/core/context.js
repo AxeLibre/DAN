@@ -3,7 +3,7 @@ import { createStage } from './stage.js';
 
 /**
  * Objet partagé par tous les modules du jeu (au lieu de variables globales).
- * - scene, camera, renderer, env : voir stage.js
+ * - scene, camera, renderer, env, lights : voir stage.js
  * - worldGroup : décor de la passerelle (c'est lui qu'on teste au clic de souris)
  * - mouse : position de la souris à l'écran (-1 → 1), raycaster : lancer de rayon partagé
  * - state : l'état du jeu qui change en cours de partie et que plusieurs modules lisent
@@ -11,13 +11,13 @@ import { createStage } from './stage.js';
  * se parlent à travers ctx pendant le jeu, jamais au moment où ils sont importés.
  */
 export function createContext() {
-    const { scene, camera, renderer, env } = createStage();
+    const { scene, camera, renderer, env, lights } = createStage();
 
     const worldGroup = new THREE.Group();      // projecteur + décor
     scene.add(worldGroup);
 
     return {
-        scene, camera, renderer, env, worldGroup,
+        scene, camera, renderer, env, lights, worldGroup,
         mouse: new THREE.Vector3(),
         raycaster: new THREE.Raycaster(),
         state: {

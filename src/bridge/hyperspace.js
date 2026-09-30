@@ -17,15 +17,14 @@ const fadeSpeed = 0.02;
 const HYPER_BRIGHTNESS = 1.8;   // 1 = luminosité d'origine de la vidéo
 const HYPER_CONTRAST = 1.6;     // 1 = contraste d'origine ; plus grand = noirs plus profonds, traînées plus vives
 
-// Lumières bleutées devant les fenêtres du pont : elles s'allument avec le saut et scintillent
-const WINDOW_LIGHTS = [
-    { pos: [-45, 6, 138] },    // fenêtre de gauche
-    { pos: [0, 8, 146] },      // fenêtre centrale
-    { pos: [45, 6, 138] }      // fenêtre de droite
-];
-const WINDOW_LIGHT_COLOR = 0x9cc4ff;
-const WINDOW_LIGHT_INTENSITY = 5000;   // au plus fort du saut
-const WINDOW_LIGHT_DISTANCE = 170;
+// Lueur bleue du tunnel sur le pont : pendant le saut, les lumières d'ambiance déjà
+// présentes (ambiante + hémisphérique) se teintent de bleu et scintillent.
+// (Pas de lumière en plus : chaque lumière de three.js est calculée sur chaque pixel
+// éclairé, TOUT LE TEMPS — 3 lumières coûtaient ~30 % de rendu et figeaient la vidéo.)
+const JUMP_LIGHT_COLOR = new THREE.Color(0x9cc4ff);
+const JUMP_TINT = 0.85;          // part de bleu au plus fort du saut
+const JUMP_HEMI_BOOST = 1.4;     // intensité ajoutée à la lumière hémisphérique
+const JUMP_AMBIENT_BOOST = 0.5;  // intensité ajoutée à la lumière ambiante
 
 // Sortie du tunnel : flash blanc qui se termine pile à la fin de la vidéo (la caméra tremble
 // pendant tout le flash), puis les étoiles, encore étirées, se résorbent
@@ -168,24 +167,33 @@ export function initHyperspace(ctx) {
         worldGroup.add(hyperscreen);
     });
 
-    // lumières des fenêtres (créées dès le départ, éteintes : pas de recompilation des shaders au 1er saut)
-    const windowLights = WINDOW_LIGHTS.map(l => {
-        const light = new THREE.PointLight(WINDOW_LIGHT_COLOR, 0, WINDOW_LIGHT_DISTANCE, 2);
-        light.position.set(...l.pos);
-        scene.add(light);
-        return light;
-    });
+    // lueur du tunnel : teinte les lumières d'ambiance (valeurs normales mémorisées)
+    const { ambient, hemi } = ctx.lights;
+    const base = {
+        ambientColor: ambient.color.clone(), ambientIntensity: ambient.intensity,
+        hemiColor: hemi.color.clone(), hemiIntensity: hemi.intensity
+    };
+    let glowing = false;
 
-    // scintillement des lumières : traînées du tunnel qui passent + éclairs de temps en temps
-    function updateWindowLights() {
+    // scintillement : traînées du tunnel qui passent + éclairs de temps en temps
+    function updateJumpLight() {
         const glow = screenMaterial ? screenMaterial.opacity : 0;   // suit le fondu de l'écran
+        if (glow <= 0) {
+            if (glowing) {            // retour exact à l'éclairage normal
+                glowing = false;
+                ambient.color.copy(base.ambientColor); ambient.intensity = base.ambientIntensity;
+                hemi.color.copy(base.hemiColor); hemi.intensity = base.hemiIntensity;
+            }
+            return;
+        }
+        glowing = true;
         const t = performance.now() * 0.001;
-        windowLights.forEach((light, i) => {
-            if (glow <= 0) { light.intensity = 0; return; }
-            const flicker = 0.7 + 0.2 * Math.sin(t * 11 + i * 2.1) * Math.sin(t * 7.3 + i)
-                          + 0.25 * Math.pow(Math.max(0, Math.sin(t * 3.1 + i * 1.7)), 16);
-            light.intensity = WINDOW_LIGHT_INTENSITY * glow * flicker;
-        });
+        const flicker = 0.7 + 0.2 * Math.sin(t * 11) * Math.sin(t * 7.3)
+                      + 0.25 * Math.pow(Math.max(0, Math.sin(t * 3.1)), 16);
+        hemi.color.copy(base.hemiColor).lerp(JUMP_LIGHT_COLOR, JUMP_TINT * glow);
+        hemi.intensity = base.hemiIntensity + JUMP_HEMI_BOOST * glow * flicker;
+        ambient.color.copy(base.ambientColor).lerp(JUMP_LIGHT_COLOR, JUMP_TINT * glow);
+        ambient.intensity = base.ambientIntensity + JUMP_AMBIENT_BOOST * glow * flicker;
     }
 
     // objets qui glissent et s'estompent pendant le saut (position de départ mémorisée)
@@ -237,7 +245,7 @@ export function initHyperspace(ctx) {
             scene.background = hyper ? HYPERSPACE_BG : null;
             sky.mesh.visible = !hyper;
         }
-        updateWindowLights();
+        updateJumpLight();
 
         if (isPlaying && screenMaterial && video) {
             if (fadeState === "fadeIn") {

@@ -4,35 +4,34 @@ import * as THREE from 'three';
 // BULLES INFO : aide affichée en bas à gauche quand le joueur approche d'une zone
 // ================================
 
-// Style des bulles : panneau vitré, liseré doré animé, reflet ; apparition en glissant
+// Style des bulles : panneau sombre, liseré doré, reflet ; apparition en glissant.
+// (Pas de flou d'arrière-plan ni de bordure qui tourne : posés sur le canvas 3D, ils
+// obligeaient le navigateur à tout redessiner à chaque image.)
 const CSS = `
 .info-bubble {
     position: fixed; left: 20px; bottom: 20px; width: 350px; z-index: 9000;
     display: flex; align-items: center; gap: 15px; padding: 14px 16px;
     color: #FFE81F; font-family: StarJedi, sans-serif; font-size: 22px; pointer-events: none;
     border-radius: 14px; overflow: hidden; isolation: isolate;
-    background: linear-gradient(135deg, rgba(20, 16, 4, .82), rgba(4, 4, 8, .86));
-    backdrop-filter: blur(6px);
+    background: linear-gradient(135deg, rgba(20, 16, 4, .9), rgba(4, 4, 8, .92));
     box-shadow: 0 10px 30px rgba(0, 0, 0, .55), 0 0 18px rgba(255, 232, 31, .25), inset 0 0 22px rgba(255, 232, 31, .1);
     opacity: 0; transform: translateX(-24px) scale(.97); filter: blur(4px);
     transition: opacity .45s ease, transform .55s cubic-bezier(.2, .9, .2, 1), filter .45s ease;
 }
 .info-bubble.show { opacity: 1; transform: none; filter: none; }
-.info-bubble::before {                     /* liseré doré qui tourne */
+.info-bubble::before {                     /* liseré doré */
     content: ''; position: absolute; inset: 0; border-radius: 14px; padding: 1.5px; z-index: -1;
-    background: conic-gradient(from var(--bubble-spin, 0deg), rgba(255, 232, 31, .15), #ffe81f, rgba(255, 232, 31, .15) 40%, rgba(255, 180, 0, .7) 70%, rgba(255, 232, 31, .15));
+    background: linear-gradient(135deg, #ffe81f, rgba(255, 232, 31, .15) 35%, rgba(255, 232, 31, .15) 65%, rgba(255, 180, 0, .8));
     -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
     -webkit-mask-composite: xor; mask-composite: exclude;
-    animation: bubble-spin 5s linear infinite;
 }
-.info-bubble::after {                      /* reflet qui passe à l'apparition */
-    content: ''; position: absolute; top: 0; bottom: 0; width: 45%; left: -60%; z-index: 1;
+.info-bubble::after {                      /* reflet qui passe à l'apparition (déplacement seul : pas de redessin) */
+    content: ''; position: absolute; top: 0; bottom: 0; width: 45%; left: 0; z-index: 1;
     background: linear-gradient(100deg, transparent, rgba(255, 245, 190, .18), transparent);
+    transform: translateX(-130%);
 }
 .info-bubble.show::after { animation: bubble-shine 1.1s .15s ease-out; }
-@property --bubble-spin { syntax: '<angle>'; inherits: false; initial-value: 0deg; }
-@keyframes bubble-spin { to { --bubble-spin: 360deg; } }
-@keyframes bubble-shine { from { left: -60%; } to { left: 120%; } }
+@keyframes bubble-shine { from { transform: translateX(-130%); } to { transform: translateX(260%); } }
 .info-bubble img { width: 120px; height: auto; border-radius: 8px; box-shadow: 0 0 12px rgba(255, 232, 31, .3); }
 .info-bubble .txt { flex: 1; line-height: 1.25; text-shadow: 0 0 10px rgba(255, 232, 31, .45); }
 `;

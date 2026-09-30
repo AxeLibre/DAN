@@ -4,6 +4,7 @@ import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js'; // même 
 /**
  * Scène, caméra, renderer, lumières et éclairages d'environnement (HDRI).
  * env.main : éclairage normal, env.alarm : éclairage rouge de l'alarme (chargés en arrière-plan).
+ * lights : lumières d'ambiance de la scène.
  */
 export function createStage() {
     const scene = new THREE.Scene();
@@ -44,12 +45,13 @@ export function createStage() {
 
     });
 
-    // Lumière
-    scene.add(new THREE.AmbientLight(0xffffff, 0.8));
+    // Lumière (lights : réutilisées par l'hyperespace pour teinter le pont, sans lumière de plus)
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
+    scene.add(ambientLight);
     const hemiLight = new THREE.HemisphereLight(0xffffff, 0x000000, 0.9);
     scene.add(hemiLight);
 
-    return { scene, camera, renderer, env };
+    return { scene, camera, renderer, env, lights: { ambient: ambientLight, hemi: hemiLight } };
 }
 
 // Redimensionnement de la fenêtre (onResize : pour les autres rendus, ex. le bloom)
