@@ -239,6 +239,17 @@ export function initAudio(scene, camera) {
         }, 1500);
     }
 
+    // Réacteur du TIE : le son monte en régime avec la vitesse (0 = croisière, 1 = boost à fond)
+    let engineLevel = -1;
+    function setEngineThrottle(level) {
+        const { ambienttie } = sounds;
+        level = Math.round(THREE.MathUtils.clamp(level, 0, 1) * 50) / 50;   // pas de mise à jour inutile
+        if (level === engineLevel) return;
+        engineLevel = level;
+        ambienttie.setPlaybackRate(1 + 0.55 * level);
+        if (ambienttie.buffer) ambienttie.setVolume(0.5 + 0.35 * level);
+    }
+
     // volume général (0 → 1) de tous les sons (les vidéos sont réglées à part)
     function setMasterVolume(v) {
         [listener, listener2, listener3, listener4].forEach(l => l.setMasterVolume(v));
@@ -248,6 +259,6 @@ export function initAudio(scene, camera) {
     return {
         listener, sounds, sfx,
         playSoundSafe, playVoice, playAt, laserSoundAt, attachExplosionSounds,
-        unlock, startAmbient, switchToShipAudio, switchToFlightAudio, setMasterVolume
+        unlock, startAmbient, switchToShipAudio, switchToFlightAudio, setMasterVolume, setEngineThrottle
     };
 }

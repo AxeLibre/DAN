@@ -2,6 +2,12 @@ import * as THREE from 'three';
 import { makeGLTFLoader } from './core/loaders.js';
 import { LEGACY_TICK_RATE, FLIGHT_CRUISE_SPEED, FLIGHT_BOOST_SPEED } from './core/constants.js';
 import { PIVOT_OMEGA } from './battle/destroyers.js';
+import { initBoostGauge } from './ui/boostGauge.js';
+
+// Boost (Maj) : réserve d'énergie qui se vide pendant le boost et se recharge au relâchement
+const BOOST_DURATION = 5;       // secondes de boost à fond, réserve pleine
+const BOOST_RECHARGE = 6;       // secondes pour recharger une réserve vide
+const BOOST_RESTART = 0.15;     // réserve vide : il faut relâcher Maj et recharger jusque-là
 
 // =====================================================================================================================
 // JOUEUR : à pied dans le destroyer, ou aux commandes du TIE dehors
@@ -428,6 +434,34 @@ export function initPlayer(ctx) {
         }
     }
 
+    // ---- réserve du boost ----
+    const boostGauge = initBoostGauge();
+    let boostEnergy = 1;
+    let boostEmpty = false;       // réserve vidée : boost bloqué jusqu'à la recharge
+    let boosting = false;
+
+    function updateBoost(dt) {
+        boosting = boostHeld && !boostEmpty && boostEnergy > 0;
+        if (boosting) {
+            boostEnergy = Math.max(0, boostEnergy - dt / BOOST_DURATION);
+            if (boostEnergy === 0) boostEmpty = true;
+        } else {
+            boostEnergy = Math.min(1, boostEnergy + dt / BOOST_RECHARGE);
+            if (boostEmpty && !boostHeld && boostEnergy >= BOOST_RESTART) boostEmpty = false;
+        }
+        return boosting;
+    }
+
+    // jauge + son du réacteur (appelé à chaque image, après la vitesse)
+    function updateFlightFeedback(dt) {
+        const inFlight = !state.isInsideShip;
+        if (!inFlight) boosting = false;
+        if (inFlight && playerState !== "flight") boostEnergy = Math.min(1, boostEnergy + dt / BOOST_RECHARGE);
+        boostGauge.update(inFlight, boostEnergy, boosting, boostEmpty, state.currentFlightSpeed);
+        const throttle = inFlight ? (state.currentFlightSpeed - FLIGHT_CRUISE_SPEED) / (FLIGHT_BOOST_SPEED - FLIGHT_CRUISE_SPEED) : 0;
+        audio.setEngineThrottle(throttle);
+    }
+
     // avance du TIE en vol (chaque image)
     function updateFlight(dt) {
         lastFrameDt = dt;
@@ -435,7 +469,7 @@ export function initPlayer(ctx) {
         if (ctx.landing.autopilotActive()) {
             state.currentFlightSpeed = FLIGHT_CRUISE_SPEED;   // le pilote automatique gère la trajectoire
         } else if (playerState === "flight") {
-            const targetSpeed = boostHeld ? FLIGHT_BOOST_SPEED : FLIGHT_CRUISE_SPEED;
+            const targetSpeed = updateBoost(dt) ? FLIGHT_BOOST_SPEED : FLIGHT_CRUISE_SPEED;
             state.currentFlightSpeed += (targetSpeed - state.currentFlightSpeed) * (1 - Math.exp(-2.5 * dt));
             // direction de la caméra
             const direction = new THREE.Vector3();
@@ -447,6 +481,7 @@ export function initPlayer(ctx) {
         } else {
             state.currentFlightSpeed = 12; // le TIE repart doucement à la sortie du hangar
         }
+        updateFlightFeedback(dt);
     }
 
     // pilote automatique, ou commandes du joueur
