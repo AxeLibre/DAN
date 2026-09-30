@@ -28,7 +28,10 @@ export function createContext() {
             // orientation du joueur (clavier, ou pilote automatique qui remet le TIE à plat)
             rotationVelocity: 0,    // vitesse de rotation gauche / droite
             flightPitch: 0,         // nez du TIE vers le haut / le bas
-            flightRoll: 0           // inclinaison dans les virages
+            flightRoll: 0,          // inclinaison dans les virages
+            currentFlightSpeed: 1,  // vitesse du TIE en vol (accélération progressive)
+            cannonActive: false,    // canon laser de la passerelle sorti
+            cameraShake: 0          // secousse de la caméra (tir, impact, collision)
         }
     };
 }
