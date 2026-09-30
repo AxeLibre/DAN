@@ -4,11 +4,14 @@ import { LaserBolts, ExplosionFX, CombatHUD, DebrisField, InstancedShips, segmen
 import { RebelFleet } from './fleet.js';
 import { LEGACY_TICK_RATE, FLIGHT_CRUISE_SPEED, FLIGHT_BOOST_SPEED, BATTLE_Y, BATTLE_MIN_Z } from './core/constants.js';
 import { loadingManager, makeGLTFLoader, initLoadingScreen } from './core/loaders.js';
-import { createStage, handleResize } from './core/stage.js';
+import { createContext } from './core/context.js';
+import { handleResize } from './core/stage.js';
 import { createSkybox, HYPERSPACE_BG } from './core/skybox.js';
 import { createBloom, BLOOM_LAYER, enableBloom } from './core/bloom.js';
 import { initAudio } from './audio.js';
 import { initVolumeControl } from './ui/volume.js';
+import { initExecutor } from './executor.js';
+import { initDestroyers, PIVOT_OMEGA } from './battle/destroyers.js';
 
 let particleSystem, material;
 let mouse = new THREE.Vector3();
@@ -24,7 +27,6 @@ let hologramOpacity = 0;     // valeur actuelle
 let hologramTarget = 0;      // 0 ou 1
 const hologramFadeSpeed = 0.03;
 let playerBox = new THREE.Box3();
-let isInsideShip = true;
 let playerState = "walk"; // "walk" | "flight"
 let gameReady;
 let tieLoaded = false;
@@ -129,7 +131,8 @@ initLoadingScreen(() => audio.unlock());
 // ==================
 // SCÈNE & CAMERA
 // ==================
-const { scene, camera, renderer, env } = createStage();
+const ctx = createContext();
+const { scene, camera, renderer, env, state } = ctx;
 
 // ==================
 // SONS (voir src/audio.js)
@@ -160,12 +163,9 @@ const hologramGroup = new THREE.Group();   // HOLOGRAM
 scene.add(worldGroup);
 scene.add(hologramGroup);
 
-//plateau tournant
-// pivot autour de (0,0,0)
-const pivot = new THREE.Group();
-pivot.position.set(0,0,0); // point autour duquel tu veux tourner
-pivot.name = "pivot";
-scene.add(pivot);
+// destroyers en orbite (voir src/battle/destroyers.js)
+ctx.destroyers = initDestroyers(ctx);
+const { pivot } = ctx.destroyers;
 let mixer;
 
 const loader2 = makeGLTFLoader();
@@ -180,189 +180,9 @@ loader2.load('public/projecteur4.glb', (gltf)=>{
 });
 
 
-const loader3 = makeGLTFLoader();
-
-loader3.load('public/star_destroyer2.glb', (gltf)=>{
-
-    const star_destroyer = gltf.scene;
-
-    star_destroyer.position.set(0, 10, 1100);   // orbite 900 → 1100 : à 900 il frôlait/traversait le gros destroyer du décor
-    star_destroyer.scale.set(30,30,30);
-    star_destroyer.rotation.y = -Math.PI;
-
-    pivot.add(star_destroyer);
-
-
-
-const star_destroyer2 = star_destroyer.clone();
-star_destroyer2.position.set(0, 20, -1100);
-star_destroyer2.scale.set(30,30,30);
-star_destroyer2.rotation.y = Math.PI;
-pivot.add(star_destroyer2);
-
-});
-
-// ===================================================================
-// SUPER STAR DESTROYER (Executor) — le vaisseau du joueur, vu de dehors
-// ===================================================================
-// Remplace les 2 anciens décors (star_destroyer0 vu depuis la passerelle +
-// star_destroyer_tower2 vu en vol). Le modèle a été aligné dans Blender sur la
-// passerelle : il prend donc EXACTEMENT la même transformation que projecteur4.
-// - All_Tower : la tourelle qui contient la passerelle → cachée quand on est dedans
-// - MainHull  : coque simplifiée (≈700 triangles) → sert aux collisions en vol
-const loader4 = makeGLTFLoader();
-let executor = null;
-let executorTower = null;
-const towerExtras = [];
-const exteriorColliders = [];
-
-loader4.load('public/star_executor_web.glb', (gltf) => {
-    executor = gltf.scene;
-    executor.position.set(0, -12, 98.5);
-    executor.scale.set(10, 10, 10);
-    executor.rotation.y = Math.PI;
-    scene.add(executor);
-
-    executor.traverse(o => {
-        if (o.name === 'All_Tower' && !executorTower) executorTower = o;
-        // panneaux lumineux collés devant les fenêtres du pont (hors du groupe All_Tower) :
-        // ils se cachent / s'affichent avec la tourelle
-        if (/^TowerGreebles1/.test(o.name)) towerExtras.push(o);
-        if (o.isMesh && /^MainHull/.test(o.name)) exteriorColliders.push(o);
-    });
-    towerExtras.forEach(o => { o.visible = false; });
-    executor.updateMatrixWorld(true);
-    hangarCut.toLocal.value.copy(executor.matrixWorld).invert();
-    if (executorTower) {
-        executorTower.traverse(o => {
-            if (!o.isMesh) return;
-            exteriorColliders.push(o);
-            hangarCut.towerMeshes.add(o);
-            // on ne creuse que la coque : les lumières de l'entrée du hangar restent visibles
-            if (/ScratchedMetal/.test(o.material.name)) carveHangarExit(o);
-        });
-        executorTower.visible = false;
-    }
-
-    // texture de coque projetée (les UV n'ont pas été dépliés après la décimation)
-    const done = new Set();
-    executor.traverse(o => {
-        if (!o.isMesh || !/ScratchedMetal/.test(o.material.name) || done.has(o.material)) return;
-        applyTriplanar(o.material);
-        done.add(o.material);
-    });
-});
-
-// -------------------------------------------------------------------
-// Texture "triplanaire" de la coque de l'Executor
-// -------------------------------------------------------------------
-// Le modèle décimé n'a pas d'UV dépliés : la texture de métal serait étirée n'importe
-// comment. À la place, le shader la projette selon les 3 axes (dessus / côtés / avant)
-// et mélange d'après l'orientation de chaque face. Pas besoin d'UV, taille constante.
-const EXECUTOR_TEX_SIZE = 8;   // taille d'un carreau de texture, en unités du modèle (×10 dans la scène)
-
-function applyTriplanar(material) {
-    const previous = material.onBeforeCompile;
-    const previousKey = material.customProgramCacheKey ? material.customProgramCacheKey() : '';
-    material.onBeforeCompile = (shader, renderer) => {
-        if (previous) previous(shader, renderer);
-        shader.uniforms.uTriToLocal = hangarCut.toLocal;          // monde → repère de l'Executor
-        shader.uniforms.uTriScale = { value: 1 / EXECUTOR_TEX_SIZE };
-        shader.vertexShader = shader.vertexShader
-            .replace('#include <common>', '#include <common>\nuniform mat4 uTriToLocal;\nvarying vec3 vTriPos;\nvarying vec3 vTriN;')
-            .replace('#include <defaultnormal_vertex>', '#include <defaultnormal_vertex>\nvTriN = normalize(mat3(uTriToLocal) * mat3(modelMatrix) * objectNormal);')
-            .replace('#include <begin_vertex>', '#include <begin_vertex>\nvTriPos = (uTriToLocal * modelMatrix * vec4(transformed, 1.0)).xyz;');
-        shader.fragmentShader = shader.fragmentShader
-            .replace('#include <common>', '#include <common>\nuniform float uTriScale;\nvarying vec3 vTriPos;\nvarying vec3 vTriN;')
-            .replace('#include <map_fragment>', `
-                vec3 triW = pow(abs(normalize(vTriN)), vec3(4.0));
-                triW /= (triW.x + triW.y + triW.z);
-                vec3 triP = vTriPos * uTriScale;
-                #ifdef USE_MAP
-                    diffuseColor *= texture2D(map, triP.zy) * triW.x
-                                  + texture2D(map, triP.xz) * triW.y
-                                  + texture2D(map, triP.xy) * triW.z;
-                #endif`)
-            .replace('#include <roughnessmap_fragment>', `
-                float roughnessFactor = roughness;
-                #ifdef USE_ROUGHNESSMAP
-                    roughnessFactor *= texture2D(roughnessMap, triP.zy).g * triW.x
-                                     + texture2D(roughnessMap, triP.xz).g * triW.y
-                                     + texture2D(roughnessMap, triP.xy).g * triW.z;
-                #endif`)
-            .replace('#include <metalnessmap_fragment>', `
-                float metalnessFactor = metalness;
-                #ifdef USE_METALNESSMAP
-                    metalnessFactor *= texture2D(metalnessMap, triP.zy).b * triW.x
-                                     + texture2D(metalnessMap, triP.xz).b * triW.y
-                                     + texture2D(metalnessMap, triP.xy).b * triW.z;
-                #endif`);
-    };
-    material.customProgramCacheKey = () => previousKey + '|triplanar';
-    material.needsUpdate = true;
-}
-
-// -------------------------------------------------------------------
-// Sortie du hangar à travers l'arrière de la tourelle
-// -------------------------------------------------------------------
-// La tourelle se prolonge ~80 unités derrière la bouche du hangar : on y creuse
-// un tunnel (dans le shader) et les collisions ignorent cette zone.
-// Boîte exprimée dans le repère de l'Executor (= repère de la passerelle) :
-// bouche du hangar : x ±2.67, y -0.03 → 2.32, fin à z = 19.08
-const hangarCut = {
-    min: new THREE.Vector3(-2.9, -0.3, 18.6),   // à peine plus grand que la bouche du hangar
-    max: new THREE.Vector3(2.9, 2.6, 40),
-    toLocal: { value: new THREE.Matrix4() },   // monde → repère de l'Executor
-    towerMeshes: new Set()
-};
-
-function carveHangarExit(mesh) {
-    const mat = mesh.material.clone();
-    mat.side = THREE.DoubleSide;
-    mat.onBeforeCompile = (shader) => {
-        shader.uniforms.uToLocal = hangarCut.toLocal;
-        shader.uniforms.uCutMin = { value: hangarCut.min };
-        shader.uniforms.uCutMax = { value: hangarCut.max };
-        shader.vertexShader = shader.vertexShader
-            .replace('#include <common>', '#include <common>\nuniform mat4 uToLocal;\nvarying vec3 vCutPos;')
-            .replace('#include <begin_vertex>', '#include <begin_vertex>\nvCutPos = (uToLocal * modelMatrix * vec4(transformed, 1.0)).xyz;');
-        shader.fragmentShader = shader.fragmentShader
-            .replace('#include <common>', '#include <common>\nuniform vec3 uCutMin;\nuniform vec3 uCutMax;\nvarying vec3 vCutPos;')
-            .replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>
-                if (all(greaterThan(vCutPos, uCutMin)) && all(lessThan(vCutPos, uCutMax))) discard;`)
-            .replace('#include <dithering_fragment>', `#include <dithering_fragment>
-                if (!gl_FrontFacing) gl_FragColor.rgb *= 0.25;   // intérieur de la tourelle, dans l'ombre`);
-    };
-    mat.customProgramCacheKey = () => 'hangar-cut';
-    mesh.material = mat;
-}
-
-// un impact dans le tunnel de sortie ne compte pas comme une collision
-function inHangarCut(hit) {
-    if (!hangarCut.towerMeshes.has(hit.object)) return false;
-    const p = hit.point.clone().applyMatrix4(hangarCut.toLocal.value);
-    return p.x > hangarCut.min.x - 0.3 && p.x < hangarCut.max.x + 0.3 &&
-           p.y > hangarCut.min.y - 0.3 && p.y < hangarCut.max.y + 0.3 &&
-           p.z > hangarCut.min.z - 0.3;
-}
-
-// Tourelle visible seulement quand la caméra est vraiment dehors
-// (en sortant du hangar, on traverse encore la tourelle sur ~80 unités)
-const _camPos = new THREE.Vector3();
-// Le tunnel À L'INTÉRIEUR de la tourelle (repère de l'Executor : la tourelle finit à z = 26.9)
-const towerTunnel = new THREE.Box3(new THREE.Vector3(-2.9, -0.3, 16), new THREE.Vector3(2.9, 2.6, 27.2));
-const _camLocal = new THREE.Vector3();
-
-function updateExecutorTower() {
-    if (!executorTower) return;
-    camera.getWorldPosition(_camPos);
-    _camLocal.copy(_camPos).applyMatrix4(hangarCut.toLocal.value);
-    // même déclencheur que le cockpit (isInsideShip) ; en plus, cachée pendant
-    // la courte traversée du tunnel à l'intérieur de la tourelle
-    const show = !isInsideShip && !towerTunnel.containsPoint(_camLocal);
-    executorTower.visible = show;
-    for (const o of towerExtras) o.visible = show;
-}
+// Executor, vu de dehors (voir src/executor.js)
+ctx.executor = initExecutor(ctx);
+const { exteriorColliders, inHangarCut } = ctx.executor;
 
 // ===================================================================
 // BALISE D'ATTERRISSAGE + PILOTE AUTOMATIQUE (entrée / sortie du hangar)
@@ -430,7 +250,7 @@ function updateAutopilot(dt) {
 
 function updateLanding(dt) {
     // balise visible seulement en vol, lumières qui défilent vers le hangar
-    landingBeacon.visible = !isInsideShip;
+    landingBeacon.visible = !state.isInsideShip;
     if (landingBeacon.visible) {
         const t = performance.now() * 0.001;
         landingBeacon.children.forEach(f => {
@@ -438,7 +258,7 @@ function updateLanding(dt) {
             f.material.opacity = 0.25 + 0.75 * Math.pow(Math.max(0, Math.cos(phase * Math.PI * 2)), 4);
         });
     }
-    if (autopilot.active || isInsideShip) return;
+    if (autopilot.active || state.isInsideShip) return;
 
     // dans la zone ET en direction du vaisseau → atterrissage automatique
     const fwd = camera.getWorldDirection(new THREE.Vector3());
@@ -916,7 +736,7 @@ function updateHangarConsole(dt) {
     hc.t += dt;
 
     // survol (seulement à pied, à proximité)
-    const near = isInsideShip && player.position.distanceTo(screenhangar.position) < 90;
+    const near = state.isInsideShip && player.position.distanceTo(screenhangar.position) < 90;
     let hover = false;
     if (near) {
         consoleRay.setFromCamera(mouse, camera);
@@ -1830,7 +1650,7 @@ let fireHeldSpace = false;
 
 // La bataille (X-Wing + TIE alliés) est visible avec le canon OU en vol
 function battleOn() {
-    return cannonActive || !isInsideShip;
+    return cannonActive || !state.isInsideShip;
 }
 
 // =================================================================
@@ -2131,7 +1951,7 @@ let tieLock = null;
 function updateTieGuns(dt) {
     tieGunCooldown -= dt;
     tieLock = null;
-    if (isInsideShip) return;
+    if (state.isInsideShip) return;
 
     const camPos = camera.getWorldPosition(new THREE.Vector3());
     const fwd = camera.getWorldDirection(new THREE.Vector3());
@@ -3258,7 +3078,7 @@ function onEmpireBoltHit(bolt, hit) {
 function rebelBoltHitTest(bolt, p0, p1) {
     const t = hitShipList(friendlyShips, p0, p1, 25);
     if (t) return { kind: 'tie', ...t };
-    if (!isInsideShip) {
+    if (!state.isInsideShip) {
         const cam = camera.getWorldPosition(new THREE.Vector3());
         const tt = segmentSphere(p0, p1, cam, 6);
         if (tt >= 0) return { kind: 'player', t: tt, point: new THREE.Vector3().lerpVectors(p0, p1, tt) };
@@ -3304,7 +3124,7 @@ function updateShooting(dt) {
             enemy.userData.fireRate = 1.5 + Math.random() * 2.5;
         }
         
-        const nearPlayer = !isInsideShip && enemy.position.distanceTo(player.position) < 700;
+        const nearPlayer = !state.isInsideShip && enemy.position.distanceTo(player.position) < 700;
         if (time > enemy.userData.nextShot && nearPlayer && Math.random() < 0.35) {
             // En vol, certains X-Wing visent le joueur (avec une bonne marge d'erreur)
             const aimP = camera.getWorldPosition(new THREE.Vector3()).add(new THREE.Vector3(
@@ -4030,7 +3850,7 @@ if (clickedObject.name.includes("Side_Control_Panels_Button_White_0001")) {
     // CHANGEMENT DE TIE : clic sur la console du hangar ("click here for change your TIE")
     // ou sur le TIE lui-même. Testé à part : avant, ce test n'était fait que si le clic
     // touchait AUSSI le décor de la passerelle, et il ignorait la console.
-    if (isInsideShip && ships.length > 1) {
+    if (state.isInsideShip && ships.length > 1) {
         const targets = [screenhangar, tiePlayer].filter(Boolean);
         if (raycaster.intersectObjects(targets, true).length > 0) {
 
@@ -4091,7 +3911,7 @@ renderer.domElement.addEventListener('pointerdown', (event) => {
     mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
     mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
 
-    if (!isInsideShip) { fireHeldMouse = true; return; }   // en vol
+    if (!state.isInsideShip) { fireHeldMouse = true; return; }   // en vol
     if (turretReady() && !isUiClick()) fireHeldMouse = true; // au canon
 });
 
@@ -4099,10 +3919,10 @@ window.addEventListener('pointerup', () => { fireHeldMouse = false; });
 
 // Affichage du HUD selon la situation
 function refreshHud() {
-    const turretMode = isInsideShip && cannonActive;
-    hud.show(!isInsideShip ? 'flight' : (turretMode ? 'turret' : null));
+    const turretMode = state.isInsideShip && cannonActive;
+    hud.show(!state.isInsideShip ? 'flight' : (turretMode ? 'turret' : null));
     cursorDiv.style.display = turretMode ? 'block' : 'none';
-    renderer.domElement.style.cursor = turretMode || !isInsideShip ? 'none' : '';
+    renderer.domElement.style.cursor = turretMode || !state.isInsideShip ? 'none' : '';
 }
 
 let radarTimer = 0;
@@ -4141,7 +3961,7 @@ function tryMove(moveVector) {
     collisionRaycaster.set(origin, dir);
     collisionRaycaster.far = moveDistance + margin;
 
-    if (isInsideShip) {
+    if (state.isInsideShip) {
         const hits = collisionRaycaster.intersectObject(collisionMeshInterior, true);
         if (hits.length > 0 && hits[0].distance < moveDistance + margin) return;
     } else {
@@ -4208,7 +4028,6 @@ const FLIGHT_PITCH_LIMIT = 1.25;  // ~70°
 // et croiseurs rebelles (ellipsoïdes) — même effet que sur la coque du décor
 // -------------------------------------------------------------------
 let lastFrameDt = 1 / 60;
-const PIVOT_OMEGA = -0.001 * LEGACY_TICK_RATE;   // rotation du pivot des destroyers (rad/s)
 const movingRay = new THREE.Raycaster();
 
 function bounceOffMovingObstacles(origin, moveVector) {
@@ -4396,7 +4215,7 @@ function enableWalkMode() {
 function exitShip() {
 
     console.log("Sortie du vaisseau");
-    isInsideShip = false;
+    state.isInsideShip = false;
 
     if (tiePlayer) tiePlayer.visible = false;
     if (cockpit) cockpit.visible = true;
@@ -4412,7 +4231,7 @@ function exitShip() {
 function enterShip() {
 
     console.log("Entrée dans le vaisseau");
-    isInsideShip = true;
+    state.isInsideShip = true;
     playerState = "flight";
 
     if (tiePlayer) tiePlayer.visible = true;
@@ -4439,13 +4258,13 @@ function updateinout() {
 
     if (playerBox.intersectsBox(detectionBox)) {
 
-        if (!isInsideShip) {
+        if (!state.isInsideShip) {
             enterShip();
         }
 
     } else {
 
-        if (isInsideShip) {
+        if (state.isInsideShip) {
             exitShip();
         }
 
@@ -4493,7 +4312,7 @@ const _droidPos = new THREE.Vector3();
 const DROID_NEAR = 60;          // distance à partir de laquelle il "parle"
 
 function updateDroidBeeps(dt) {
-    if (!droidBody || !isInsideShip) return;
+    if (!droidBody || !state.isInsideShip) return;
     droidBody.getWorldPosition(_droidPos);
     camera.getWorldPosition(_cameraWorld);
     const near = _droidPos.distanceTo(_cameraWorld) < DROID_NEAR;
@@ -4581,7 +4400,7 @@ function animate(){
 
     // Intérieur de la passerelle (16 personnages animés, droïdes, portes…) : inutile de
     // l'animer et de le dessiner quand on vole loin de la tour, il est invisible de là.
-    const interiorOn = isInsideShip || player.position.distanceToSquared(INTERIOR_CENTER) < INTERIOR_RANGE * INTERIOR_RANGE;
+    const interiorOn = state.isInsideShip || player.position.distanceToSquared(INTERIOR_CENTER) < INTERIOR_RANGE * INTERIOR_RANGE;
     if (interiorOn !== interiorWasOn) {
         interiorWasOn = interiorOn;
         for (const child of worldGroup.children) {
@@ -4590,8 +4409,7 @@ function animate(){
     }
     mixers.forEach(m => { if (interiorOn || m.alwaysUpdate) m.update(dt); });
 
-    // rotation du pivot autour de Y
-    pivot.rotation.y -= 0.001 * k; // vitesse de rotation
+    ctx.destroyers.update(k);
     material.uniforms.time.value += dt;
     material.uniforms.globalRotation.value += dt * 0.2;
     if (autopilot.active) updateAutopilot(dt);
@@ -4733,10 +4551,10 @@ else if (objectFade === "fadeIn") {
 
 
     updateinout();
-    updateExecutorTower();
+    ctx.executor.updateTower();
 
     // retour à hauteur de marche une fois rentré dans le vaisseau
-    if (isInsideShip) {
+    if (state.isInsideShip) {
         player.position.y += (3.5 - player.position.y) * (1 - Math.exp(-5 * dt));
     }
 
@@ -4789,7 +4607,7 @@ if (!alarmActive) {
     renderer.toneMappingExposure = 0.3;
 }
 
-    if (cockpit && !isInsideShip) {
+    if (cockpit && !state.isInsideShip) {
 
         cockpitFloatTime += dt;
 
