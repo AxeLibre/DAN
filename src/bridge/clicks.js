@@ -67,10 +67,6 @@ export function initClicks(ctx) {
                 ctx.mapScreen.toggle();
             }
 
-            if (clickedObject.name.includes("Table_2_Button_Blue_0")) {
-                open.play();
-            }
-
             // bips des autres boutons
             if (clickedObject.name.includes("Side_Control_Panels_Button_White_0")) {
                 button2.play();
@@ -98,10 +94,6 @@ export function initClicks(ctx) {
 
             if (clickedObject.name.includes("Front_Control_Panels_Button_Blue_0")) {
                 button3.play();
-            }
-
-            if (clickedObject.name.includes("Object_8")) {
-                ctx.decor.droidClicked();
             }
         }
 
