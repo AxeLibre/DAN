@@ -85,5 +85,45 @@ export function initBattleHud(ctx) {
         }
     }
 
-    return { refreshHud, updateCombatHud };
+    // -------------------------------------------------------------------
+    // ANNONCE EN GRAND (ex. "Frégate Nebulon-B détruite !")
+    // -------------------------------------------------------------------
+    const style = document.createElement('style');
+    style.textContent = `
+        #battle-announce {
+            position: fixed; left: 50%; top: 22%; transform: translate(-50%, -50%);
+            pointer-events: none; z-index: 99999; text-align: center; white-space: nowrap;
+            font-family: Orbitron, 'Segoe UI', sans-serif; font-weight: 900; font-size: clamp(22px, 4.2vw, 54px);
+            letter-spacing: .12em; text-transform: uppercase; color: #fff;
+            text-shadow: 0 0 8px #ffb347, 0 0 22px #ff6a00, 0 0 48px rgba(255, 60, 0, .75);
+            opacity: 0;
+        }
+        #battle-announce::after {
+            content: ''; display: block; height: 3px; margin: 10px auto 0; width: 0;
+            background: linear-gradient(90deg, transparent, #ffd27a, #ff6a00, #ffd27a, transparent);
+            box-shadow: 0 0 14px #ff8a00;
+        }
+        #battle-announce.show { animation: announce-in 2.6s cubic-bezier(.2, .9, .25, 1) forwards; }
+        #battle-announce.show::after { animation: announce-line 2.6s ease-out forwards; }
+        @keyframes announce-in {
+            0%   { opacity: 0; transform: translate(-50%, -50%) scale(1.8); filter: blur(10px); letter-spacing: .5em; }
+            12%  { opacity: 1; transform: translate(-50%, -50%) scale(1);   filter: blur(0);    letter-spacing: .12em; }
+            80%  { opacity: 1; transform: translate(-50%, -50%) scale(1.03); }
+            100% { opacity: 0; transform: translate(-50%, -60%) scale(1.06); filter: blur(4px); }
+        }
+        @keyframes announce-line { 0% { width: 0; } 20% { width: 100%; } 100% { width: 100%; } }
+    `;
+    document.head.appendChild(style);
+    const banner = document.createElement('div');
+    banner.id = 'battle-announce';
+    document.body.appendChild(banner);
+
+    function announce(text) {
+        banner.textContent = text;
+        banner.classList.remove('show');
+        void banner.offsetWidth;          // relance l'animation même si une annonce est en cours
+        banner.classList.add('show');
+    }
+
+    return { refreshHud, updateCombatHud, announce };
 }

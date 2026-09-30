@@ -89,8 +89,23 @@ export function initBattle(ctx) {
     Object.assign(battle, initRebels(ctx));
     Object.assign(battle, initImperials(ctx));
     Object.assign(battle, initDogfight(ctx));
-    battle.fleet = initCapitalShips(ctx);
+    const capitalShips = initCapitalShips(ctx);
+    battle.fleet = capitalShips.fleet;
+    battle.updateTurbolasers = capitalShips.updateTurbolasers;
     Object.assign(battle, initBattleHud(ctx));
+
+    // Score de Dan : chasseurs abattus + croiseurs mis hors de combat
+    const score = { fighters: 0, capitals: 0 };
+    battle.addKill = function (kind) {
+        if (kind === 'capital') score.capitals++;
+        else score.fighters++;
+        ctx.hud.setScore(score.fighters, score.capitals);
+    };
+    // un croiseur rebelle hors de combat : on compte, et on l'annonce en grand
+    battle.capitalDestroyed = function (ship) {
+        battle.addKill('capital');
+        battle.announce(`${ship.def.label} détruit${ship.def.feminine ? 'e' : ''} !`);
+    };
 
     // BOUTON D'ACTIVATION/DÉSACTIVATION DU CANON (bouton blanc de la console)
     battle.toggleCannon = function () {
@@ -123,6 +138,7 @@ export function initBattle(ctx) {
             battle.updateCombat(dt);
         }
         battle.fleet.update(dt);
+        battle.updateTurbolasers(dt);
         debris.update(dt);
 
         for (const kind in shipInstancers) shipInstancers[kind].update();   // chasseurs instanciés

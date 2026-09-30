@@ -36,7 +36,8 @@ export class RebelFleet {
      * ctx = {
      *   scene, fx, debris,
      *   obstacles: () => [{ center: Vector3, radius }],   // destroyers impériaux
-     *   onArrive(ship), onPartDestroyed(ship, part), onShipDestroyed(ship)
+     *   onArrive(ship), onPartDestroyed(ship, part), onShipDestroyed(ship),
+     *   onShipDisabled(ship)   // hors de combat : coupé en deux ou entièrement détruit (une seule fois)
      * }
      */
     constructor(ctx) {
@@ -537,6 +538,7 @@ export class RebelFleet {
         if (alive.length === 0) {
             // plus rien : explosion finale, puis un autre croiseur viendra plus tard
             ship.state = 'adrift';
+            this._disable(ship);
             setTimeout(() => {
                 if (ship.state === 'dead') return;   // déjà retiré (fin de la bataille entre-temps)
                 const c = ship.group.position.clone();
@@ -553,6 +555,7 @@ export class RebelFleet {
         if (part === mid || ship.state === 'adrift') {
             // coupé en deux (ou déjà coupé) : les morceaux restants partent à la dérive
             ship.state = 'adrift';
+            this._disable(ship);
             for (const p of alive) {
                 if (p.userData.drift) continue;
                 const away = p === bow ? 1 : p === stern ? -1 : (Math.random() < 0.5 ? 1 : -1);
@@ -563,6 +566,22 @@ export class RebelFleet {
                 };
             }
         }
+    }
+
+    // hors de combat : prévenu une seule fois par croiseur
+    _disable(ship) {
+        if (ship.disabled) return;
+        ship.disabled = true;
+        if (this.ctx.onShipDisabled) this.ctx.onShipDisabled(ship);
+    }
+
+    /** Un point au hasard sur la coque d'un croiseur (parties intactes), en coordonnées monde */
+    randomHullPoint(ship) {
+        const alive = ship.parts.filter(p => !p.userData.destroyed);
+        const part = alive[Math.floor(Math.random() * alive.length)] || ship.parts[0];
+        const e = this._ellipsoid(part);
+        const d = new THREE.Vector3(rand(-1, 1), rand(-1, 1), rand(-1, 1)).normalize();
+        return part.localToWorld(d.multiply(e.radii).multiplyScalar(0.85).add(e.center));
     }
 
     /** Positions des croiseurs (radar) */

@@ -34,7 +34,6 @@ export function initRebels(ctx) {
     };
 
     let xwingModel = null;        // Modèle X-Wing
-    let playerKills = 0;
     let xwingReinforceTimer = 0;
     let battleWasOn = false;
     const _fwdX = new THREE.Vector3(0, 0, -1);   // avant d'un X-Wing dans son repère
@@ -293,8 +292,7 @@ export function initRebels(ctx) {
         debris.spawn(enemy.position, 6, { speed: [10, 40], size: [0.8, 2.5], life: [2, 4], baseVel: enemy.userData.velocity, hot: 0.6 });
 
         if (byPlayer) {
-            playerKills++;
-            hud.setScore(playerKills);   // (le son de l'explosion est joué par fx.explosion, spatialisé)
+            battle.addKill('fighter');   // (le son de l'explosion est joué par fx.explosion, spatialisé)
         }
 
         // retour en réserve : il reviendra avec une escadrille de renfort
