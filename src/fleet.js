@@ -190,6 +190,7 @@ export class RebelFleet {
         if (!this._hasTypes()) return;
         this.elapsed += dt;
         hullTime.value = this.elapsed;
+        this._rayBudget = 1;
 
         // arrivées programmées
         for (let i = this.timers.length - 1; i >= 0; i--) {
@@ -407,7 +408,12 @@ export class RebelFleet {
                 const t = segmentSphere(a, b, zero, 1);
                 if (t < 0) continue;
 
-                // lancer de rayon précis sur la coque
+                // lancer de rayon précis sur la coque — coûteux (dizaines de milliers de
+                // triangles) : un seul par image, les autres tirs attendent l'image suivante
+                if (bolt) {
+                    if (this._rayBudget <= 0) continue;
+                    this._rayBudget--;
+                }
                 const dir = p1.clone().sub(p0).normalize();
                 this._ray.set(p0, dir);
                 this._ray.far = 2500;

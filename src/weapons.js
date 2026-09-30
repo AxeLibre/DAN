@@ -755,3 +755,56 @@ export function makeDamageable(root) {
         }
     };
 }
+
+// ===================================================================
+// CHASSEURS INSTANCIÉS — tous les vaisseaux d'un même modèle en quelques appels de dessin
+// ===================================================================
+// Avant : chaque X-Wing était une copie complète du modèle (9 morceaux = 9 appels de
+// dessin PAR vaisseau). Maintenant : chaque morceau du modèle est dessiné une seule fois
+// pour tous les vaisseaux (InstancedMesh). Les vaisseaux restent de simples Group
+// (position / rotation / échelle / visible) : toute la logique du jeu est inchangée.
+export class InstancedShips {
+
+    /**
+     * model : le modèle tel qu'il serait ajouté dans le Group d'un vaisseau
+     *         (avec sa position / rotation / échelle propres)
+     * max   : nombre maximum de vaisseaux
+     */
+    constructor(scene, model, max) {
+        this.ships = [];
+        this.parts = [];
+        this._m = new THREE.Matrix4();
+
+        const holder = new THREE.Group();
+        holder.add(model);
+        holder.updateMatrixWorld(true);
+        model.traverse(o => {
+            if (!o.isMesh) return;
+            const mesh = new THREE.InstancedMesh(o.geometry, o.material, max);
+            mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+            mesh.count = 0;
+            mesh.frustumCulled = false;
+            scene.add(mesh);
+            this.parts.push({ mesh, local: o.matrixWorld.clone() });
+        });
+    }
+
+    add(ship) { this.ships.push(ship); }
+
+    update() {
+        let n = 0;
+        for (const ship of this.ships) {
+            if (!ship.visible) continue;
+            ship.updateMatrix();
+            for (const p of this.parts) {
+                this._m.multiplyMatrices(ship.matrix, p.local);
+                p.mesh.setMatrixAt(n, this._m);
+            }
+            n++;
+        }
+        for (const p of this.parts) {
+            p.mesh.count = n;
+            p.mesh.instanceMatrix.needsUpdate = true;
+        }
+    }
+}
