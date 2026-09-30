@@ -12,16 +12,15 @@ import { initAudio } from './audio.js';
 import { initVolumeControl } from './ui/volume.js';
 import { initExecutor } from './executor.js';
 import { initDestroyers, PIVOT_OMEGA } from './battle/destroyers.js';
+import { initHyperspace, HYPER_MOVE_DISTANCE } from './bridge/hyperspace.js';
+import { initMapScreen } from './bridge/mapScreen.js';
+import { initScreens } from './bridge/screens.js';
+import { initDoors } from './bridge/doors.js';
 
 let particleSystem, material;
-let mouse = new THREE.Vector3();
 let mouseSmooth = new THREE.Vector3();
-const raycaster = new THREE.Raycaster();
 let plane = new THREE.Plane(new THREE.Vector3(0,0,1),0);
 let clock = new THREE.Clock();
-let isPlaying = false;        // ✅ contrôle si l’animation de l’écran est en cours
-let fadeState = "idle";  // "idle" | "fadeIn" | "playing" | "fadeOut"
-let fadeSpeed = 0.02;
 let hologramActive = false;   // état logique ON/OFF
 let hologramOpacity = 0;     // valeur actuelle
 let hologramTarget = 0;      // 0 ou 1
@@ -42,14 +41,7 @@ const flightSpeed = 1; // 🚀 plus rapide
 let currentFlightSpeed = 1; // pour accélération progressive
 const maxFlightSpeed = 1;
 const acceleration = 0.05;
-let objectFade = "idle"; // "fadeOut" | "hidden" | "fadeIn"
-let objectOpacity = 1;
-const objectFadeSpeed = 0.02;
 let poweroff;
-let ctrlScreenVisible = false;
-let ctrlScreenFadeDirection = 0; // 1 = fade in, -1 = fade out
-const ctrlScreenFadeSpeed = 1.5;
-const screenGeometry = new THREE.PlaneGeometry(16, 9); // format 16:9
 
 let panelMesh;
 
@@ -59,11 +51,7 @@ let panelAction;
 
 let alarmActive = false; // état ON/OFF
 let cockpitFloatTime = 0;
-let videoTexture;
-let hyperscreen;
-let screenMaterial;
 let originalPositions = new Map();
-const hyperMoveDistance = 200;
 let rotationVelocity = 0;
 const rotationAcceleration = 0.2;
 const rotationDamping = 0.85;
@@ -108,18 +96,6 @@ starJediFont.load().then(function(font){
 });
 
 
-let video;
-
-video = document.createElement("video");
-video.src = "public/hyperscreen.mp4";
-video.loop = false;
-video.muted = false; // important
-video.playsInline = true;
-video.pause();
-
-videoTexture = new THREE.VideoTexture(video);
-videoTexture.colorSpace = THREE.SRGBColorSpace;
-videoTexture.flipY = false;
 
 
 
@@ -132,12 +108,12 @@ initLoadingScreen(() => audio.unlock());
 // SCÈNE & CAMERA
 // ==================
 const ctx = createContext();
-const { scene, camera, renderer, env, state } = ctx;
+const { scene, camera, renderer, env, state, worldGroup, mouse, raycaster } = ctx;
 
 // ==================
 // SONS (voir src/audio.js)
 // ==================
-const audio = initAudio(scene, camera);
+const audio = ctx.audio = initAudio(scene, camera);
 const { listener, playSoundSafe, playVoice, playAt, sfx, laserSoundAt } = audio;
 const { ambientSound, ambienttie, ctrlscreenon, ctrlscreenoff, holoOnSound, holoOffSound2, tieOn, tieOff, open,
         transittionsound, button1, button2, button3, tiechange, laseron, laseroff, explosion, boom, doorSound,
@@ -148,7 +124,7 @@ const { ambientSound, ambienttie, ctrlscreenon, ctrlscreenoff, holoOnSound, holo
 // ==================
 // SKYBOX
 // ==================
-const sky = createSkybox(scene);
+const sky = ctx.sky = createSkybox(scene);
 
 // ==================
 // LOAD GLB MODEL
@@ -157,10 +133,8 @@ const sky = createSkybox(scene);
 // ==================
 //Groupes d'objets
 // ==================
-const worldGroup = new THREE.Group();      // projecteur + décor
 const hologramGroup = new THREE.Group();   // HOLOGRAM
 
-scene.add(worldGroup);
 scene.add(hologramGroup);
 
 // destroyers en orbite (voir src/battle/destroyers.js)
@@ -183,6 +157,12 @@ loader2.load('public/projecteur4.glb', (gltf)=>{
 // Executor, vu de dehors (voir src/executor.js)
 ctx.executor = initExecutor(ctx);
 const { exteriorColliders, inHangarCut } = ctx.executor;
+
+// Passerelle : hyperespace, écran MAP, écrans vidéo, portes (voir src/bridge/)
+ctx.hyperspace = initHyperspace(ctx);
+ctx.mapScreen = initMapScreen(ctx);
+ctx.screens = initScreens(ctx);
+ctx.doors = initDoors(ctx);
 
 // ===================================================================
 // BALISE D'ATTERRISSAGE + PILOTE AUTOMATIQUE (entrée / sortie du hangar)
@@ -448,40 +428,6 @@ loader7.load('public/officer.glb', (gltf) => {
 
 });
 
-const ctrlscreen = document.createElement("video");
-ctrlscreen.src = "public/controlscreen.mp4";
-ctrlscreen.loop = true;
-ctrlscreen.muted = true;
-
-const ctrlTexture = new THREE.VideoTexture(ctrlscreen);
-
-const ctrlMaterial = new THREE.MeshBasicMaterial({
-    map: ctrlTexture,
-    transparent: true,
-    opacity: 0, // écran invisible au départ
-    blending: THREE.AdditiveBlending,
-    depthWrite: false,
-    toneMapped: false
-});
-
-const ctrlPlane = new THREE.Mesh(
-    new THREE.PlaneGeometry(12, 6),
-    ctrlMaterial
-);
-
-ctrlPlane.position.set(0, 5.3, 142);
-ctrlPlane.rotation.y = Math.PI;
-ctrlPlane.rotation.x = -Math.PI / 12;
-ctrlPlane.scale.x = 0;
-
-scene.add(ctrlPlane);
-
-
-
-
-
-
-
 let hyperbouton;
 
 const loader8 = makeGLTFLoader();
@@ -501,60 +447,6 @@ loader8.load('public/hyperbouton.glb', (gltf)=>{
 
 
 
-
-const loader9 = makeGLTFLoader();
-
-loader9.load('public/hyperscreen.glb', (gltf) => {
-    hyperscreen = gltf.scene;
-    // Écran agrandi ×21 (mêmes proportions qu'avant : 50 × 150 × 70) pour englober TOUT l'Executor :
-    // l'avant du vaisseau reste visible depuis le pont, devant le tunnel d'hyperespace.
-    // Hauteur et largeur augmentées pour que le bord (ouvert) de l'écran reste hors du champ de vision.
-    // Boîte obtenue : x ±29 800, y -23 200 → 23 200 (centrée sur les yeux), z -19 300 → 21 200
-    // (proue de l'Executor à z ≈ 20 000 ; coin le plus lointain ≈ 43 000 < far 50 000).
-    hyperscreen.position.set(0, -11664, 2500);
-    hyperscreen.scale.set(1700, 5437, 1470);
-    hyperscreen.rotation.y = Math.PI;
-
-    hyperscreen.traverse(obj => {
-        if(obj.isMesh){
-            screenMaterial = new THREE.MeshBasicMaterial({ // ⚡ récupéré ici
-                map: videoTexture,
-                transparent: true,
-                opacity: 0,
-                depthWrite: false,   // invisible la plupart du temps : ne doit rien masquer derrière lui
-                side: THREE.DoubleSide
-            });
-            obj.material = screenMaterial;
-        }
-    });
-
-    worldGroup.add(hyperscreen);
-});
-
-
-
-
-const loader10 = makeGLTFLoader();
-let doorleft, doorright;
-let doorState = 0; // 0 = fermé, 1 = ouvert
-
-loader10.load('public/doorleft.glb', (gltf)=>{
-    doorleft = gltf.scene; //
-    doorleft.position.set(-12,-12, 233);
-    doorleft.scale.set(10,10,10);
-    doorleft.rotation.y = Math.PI; 
-    worldGroup.add(doorleft);
-});
-
-const loader11 = makeGLTFLoader();
-
-loader11.load('public/doorright.glb', (gltf)=>{
-    doorright = gltf.scene; //
-    doorright.position.set(12,-12, 233);
-    doorright.scale.set(10,10,10);
-    doorright.rotation.y = Math.PI; 
-    worldGroup.add(doorright);
-});
 
 let detectionMesh;
 const gltfLoader = makeGLTFLoader();
@@ -831,7 +723,7 @@ loader12.load('public/tie_fighter0.glb', (gltf) => {
     tiefighter0.scale.set(8,8,8);
     tiefighter0.rotation.y = -Math.PI;
     worldGroup.add(tiefighter0);
-    objectsToFade.push(tiefighter0);
+    ctx.hyperspace.objectsToFade.push(tiefighter0);
     console.log(gltf.animations);
 
 
@@ -1402,212 +1294,6 @@ function createCollisionSparks(position, normal, moveDir = null) {
 
 
 
-
-// Texture VIDEO ON / OFF
-
-const textureLoader = new THREE.TextureLoader();
-
-const screenOffTexture1 = textureLoader.load('public/screen1_off.webp');
-const screenOffTexture2 = textureLoader.load('public/screen2_off.jpg');
-const screenOffTexture3 = textureLoader.load('public/screen3_off.jpeg');
-const screenOffTexture4 = textureLoader.load('public/screen4_off.jpg');
-
-const screenOffMaterial1 = new THREE.MeshStandardMaterial({
-    map: screenOffTexture1,
-    roughness: 0.2,   // plus petit = plus brillant
-    metalness: 0.4    // intensité reflet
-});
-
-const screenOffMaterial2 = new THREE.MeshStandardMaterial({
-    map: screenOffTexture2,
-    roughness: 0.2,
-    metalness: 0.4
-});
-
-const screenOffMaterial3 = new THREE.MeshStandardMaterial({
-    map: screenOffTexture3,
-    roughness: 0.2,
-    metalness: 0.4
-});
-
-const screenOffMaterial4 = new THREE.MeshStandardMaterial({
-    map: screenOffTexture4,
-    roughness: 0.2,
-    metalness: 0.4
-});
-
-
-
-
-// Écrans vidéo (extraits de films) : un écran ÉMET sa lumière. Avant, la vidéo était
-// "peinte" sur un matériau éclairé, assombri par l'éclairage et l'exposition (0.3).
-// Matériau non éclairé et sans tone mapping = vraies couleurs de la vidéo.
-// (pas de bloom : ces écrans ne sont pas sur le calque BLOOM_LAYER)
-const SCREEN_BRIGHTNESS = 1.0;   // 1 = luminosité d'origine de la vidéo, 1.2 = plus lumineux
-function makeScreenVideoMaterial(texture) {
-    return new THREE.MeshBasicMaterial({
-        map: texture,
-        color: new THREE.Color(SCREEN_BRIGHTNESS, SCREEN_BRIGHTNESS, SCREEN_BRIGHTNESS),
-        toneMapped: false,
-        side: THREE.DoubleSide
-    });
-}
-
-const video2 = document.createElement("video");
-video2.src = "public/screen1.mp4";
-video2.preload = "none";   // téléchargée seulement au 1er clic sur l'écran
-video2.loop = false;
-video2.muted = false; // important pour autoplay navigateur
-video2.playsInline = true;
-video2.pause(); // démarre en pause
-
-const videoTexture2 = new THREE.VideoTexture(video2);
-videoTexture2.colorSpace = THREE.SRGBColorSpace;
-
-const screenMaterial2 = makeScreenVideoMaterial(videoTexture2);
-
-const screen = new THREE.Mesh(screenGeometry, screenOffMaterial1);
-
-screen.position.set(-59, 6, -0.5); // ajuste selon ta scène
-screen.rotation.y = Math.PI/2;
-scene.add(screen);
-
-
-
-
-// 1️⃣ élément vidéo HTML
-const video3 = document.createElement("video");
-video3.src = "public/screen2.mp4";
-video3.preload = "none";   // téléchargée seulement au 1er clic sur l'écran
-video3.loop = false;
-video3.muted = false;
-video3.playsInline = true;
-video3.pause();
-
-// 2️⃣ texture Three.js
-const videoTexture3 = new THREE.VideoTexture(video3);
-videoTexture3.colorSpace = THREE.SRGBColorSpace;
-
-const screenMaterial3 = makeScreenVideoMaterial(videoTexture3);
-
-const screen2 = new THREE.Mesh(screenGeometry, screenOffMaterial2);
-
-screen2.position.set(59, 6, -0.5); // ajuste selon ta scène
-screen2.rotation.y = -Math.PI/2;
-scene.add(screen2);
-
-
-
-
-
-// 1️⃣ élément vidéo HTML
-const video4 = document.createElement("video");
-video4.src = "public/screen3.mp4";
-video4.preload = "none";   // téléchargée seulement au 1er clic sur l'écran
-video4.loop = false;
-video4.muted = false;
-video4.playsInline = true;
-video4.pause();
-
-// 2️⃣ texture Three.js
-const videoTexture4 = new THREE.VideoTexture(video4);
-videoTexture4.colorSpace = THREE.SRGBColorSpace;
-
-const screenMaterial4 = makeScreenVideoMaterial(videoTexture4);
-
-const screen3 = new THREE.Mesh(screenGeometry, screenOffMaterial3);
-
-screen3.position.set(58.35, 2.4, 40); // ajuste selon ta scène
-screen3.scale.set(0.8, 1, 0.8)
-
-scene.add(screen3);
-
-
-// 1️⃣ élément vidéo HTML
-const video5 = document.createElement("video");
-video5.src = "public/screen4.mp4";
-video5.preload = "none";   // téléchargée seulement au 1er clic sur l'écran
-video5.loop = false;
-video5.muted = false;
-video5.playsInline = true;
-video5.pause();
-
-// 2️⃣ texture Three.js
-const videoTexture5 = new THREE.VideoTexture(video5);
-videoTexture5.colorSpace = THREE.SRGBColorSpace;
-
-const screenMaterial5 = makeScreenVideoMaterial(videoTexture5);
-
-const screen4 = new THREE.Mesh(screenGeometry, screenOffMaterial4);
-
-screen4.position.set(-58.35, 2.4, 40); // ajuste selon ta scène
-screen4.scale.set(0.8, 1, 0.8)
-
-scene.add(screen4);
-
-
-
-
-const screens = [
-    {
-        mesh: screen,
-        video: video2,
-        videoMaterial: screenMaterial2,
-        offMaterial: screenOffMaterial1,
-        isOn: false
-    },
-    {
-        mesh: screen2,
-        video: video3,
-        videoMaterial: screenMaterial3,
-        offMaterial: screenOffMaterial2,
-        isOn: false
-    },
-     {
-        mesh: screen3,
-        video: video4,
-        videoMaterial: screenMaterial4,
-        offMaterial: screenOffMaterial3,
-        isOn: false
-    },
-    {
-        mesh: screen4,
-        video: video5,
-        videoMaterial: screenMaterial5,
-        offMaterial: screenOffMaterial4,
-        isOn: false
-    }
-];
-
-
-const screenState1 = { isOn: false };
-const screenState2 = { isOn: false };
-const screenState3 = { isOn: false };
-const screenState4 = { isOn: false };
-
-function toggleScreen(screenObj) {
-
-    if (!screenObj.isOn) {
-
-        // 🔥 remplacer texture par vidéo
-        screenObj.mesh.material = screenObj.videoMaterial;
-
-        screenObj.video.play().catch(err => console.log(err));
-        screenObj.isOn = true;
-
-    } else {
-
-        screenObj.video.pause();
-
-        // remettre image fixe
-        screenObj.mesh.material = screenObj.offMaterial;
-
-        screenObj.isOn = false;
-    }
-}
-
-
-const clickableObjects = [screen,screen2,screen3,screen4];
 
 // ==========================================================
 // LASER
@@ -2877,12 +2563,13 @@ function updatePatrols(dt) {
     const t = performance.now() * 0.001;
     const up = new THREE.Vector3(0, 1, 0);
 
-    // Hyperespace : comme les autres vaisseaux autour (voir objectFade), les patrouilles
+    // Hyperespace : comme les autres vaisseaux autour (voir bridge/hyperspace.js), les patrouilles
     // glissent en s'estompant, restent cachées pendant le saut, puis reviennent.
-    const hyperOffset = objectFade === 'fadeOut' ? -hyperMoveDistance * (1 - objectOpacity)
-                      : objectFade === 'fadeIn'  ?  hyperMoveDistance * (1 - objectOpacity) : 0;
-    const shown = objectFade !== 'hidden';
-    const fading = objectFade === 'fadeOut' || objectFade === 'fadeIn';
+    const hyperFade = ctx.hyperspace.fade;
+    const hyperOffset = hyperFade.state === 'fadeOut' ? -HYPER_MOVE_DISTANCE * (1 - hyperFade.opacity)
+                      : hyperFade.state === 'fadeIn'  ?  HYPER_MOVE_DISTANCE * (1 - hyperFade.opacity) : 0;
+    const shown = hyperFade.state !== 'hidden';
+    const fading = hyperFade.state === 'fadeOut' || hyperFade.state === 'fadeIn';
 
     patrols.forEach((p, gi) => {
         // nouvelle consigne de vol de temps en temps
@@ -2929,7 +2616,7 @@ function updatePatrols(dt) {
     if (fading || patrolFaded) {
         for (const part of patrolInstancer.parts) {
             part.mesh.material.transparent = fading;
-            part.mesh.material.opacity = fading ? objectOpacity : 1;
+            part.mesh.material.opacity = fading ? hyperFade.opacity : 1;
         }
         patrolFaded = fading;
     }
@@ -3333,55 +3020,6 @@ const capitalTemplates = [null, null, null];
     });
 });
 
-//===================================================
-// CONTROL SCREEN
-//===================================================
-
-
-function toggleCtrlScreen() {
-
-    if (ctrlScreenVisible) {
-        ctrlScreenFadeDirection = -1; // fade out
-    } else {
-        ctrlScreenFadeDirection = 1; // fade in
-        ctrlscreen.play(); // démarre la vidéo si on l'allume
-        ctrlscreenon.play()
-    }
-
-    ctrlScreenVisible = !ctrlScreenVisible;
-    ctrlscreenoff.play()
-}
-
-function updateCtrlScreenFade(dt) {
-
-    if (ctrlScreenFadeDirection === 0) return;
-
-    // fade
-    ctrlMaterial.opacity += ctrlScreenFadeDirection * ctrlScreenFadeSpeed * dt;
-    ctrlMaterial.opacity = THREE.MathUtils.clamp(ctrlMaterial.opacity, 0, 1);
-
-    // scale TV
-    ctrlPlane.scale.x += ctrlScreenFadeDirection * ctrlScreenFadeSpeed * dt;
-    ctrlPlane.scale.x = THREE.MathUtils.clamp(ctrlPlane.scale.x, 0, 1);
-
-    if (ctrlMaterial.opacity === 0) {
-
-        ctrlScreenFadeDirection = 0;
-        ctrlscreen.pause();
-
-    }
-
-    if (ctrlMaterial.opacity === 1) {
-
-        ctrlScreenFadeDirection = 0;
-
-    }
-}
-
-
-
-
-
 // ===================================================
 // LOAD JSON      JSON        JSON
 // ===================================================
@@ -3547,29 +3185,6 @@ scene.add(particleSystem);
 
 
 
-function setOpacityRecursive(object, opacity) {
-    object.traverse((child) => {
-        if (child.isMesh) {
-            child.material.transparent = true;
-            child.material.opacity = opacity;
-        }
-    });
-}
-
-const objectsToFade = [];
-
-const tie = scene.getObjectByName("tie_fighter0");
-const pivot2 = scene.getObjectByName("pivot");
-
-if (tie) objectsToFade.push(tie);
-if (pivot2) objectsToFade.push(pivot2);
-
-objectsToFade.forEach(obj => {
-    obj.userData.originalPosition = obj.position.clone();
-});
-
-
-
 // =====================================================================================================================
 // DEPLACEMENT                      PLAYER                                                  CLAVIER
 // =====================================================================================================================
@@ -3706,13 +3321,7 @@ renderer.domElement.addEventListener('click', (event) => {
 
         if (clickedObject.name.includes("Side_Control_Panels_Button_Blue_0001")) {
 
-            if (!isPlaying && video) {
-                isPlaying = true;
-                fadeState = "fadeIn";
-                objectFade = "fadeOut"; // 👈 on lance le fade objets
-                video.currentTime = 0;
-                video.play();
-            }
+            ctx.hyperspace.start();
         }
 
 
@@ -3796,7 +3405,7 @@ if (clickedObject.name.includes("Side_Control_Panels_Button_White_0001")) {
 
         if (clickedObject.name.includes("Side_Control_Panels_Control_Panels_0001")) {
 
-            toggleCtrlScreen();
+            ctx.mapScreen.toggle();
 
         }
 
@@ -3873,26 +3482,6 @@ if (clickedObject.name.includes("Side_Control_Panels_Button_White_0001")) {
         }
     }
 });
-
-// Écrans vidéo cliquables (enregistré UNE seule fois)
-function onMouseClick(event) {
-    const m = new THREE.Vector2(
-        (event.clientX / window.innerWidth) * 2 - 1,
-        -(event.clientY / window.innerHeight) * 2 + 1
-    );
-    raycaster.setFromCamera(m, camera);
-
-    const intersects = raycaster.intersectObjects(clickableObjects, true);
-    if (intersects.length > 0) {
-        const clickedObject = intersects[0].object;
-        screens.forEach(screenObj => {
-            if (clickedObject === screenObj.mesh) {
-                toggleScreen(screenObj);
-            }
-        });
-    }
-}
-window.addEventListener("click", onMouseClick);
 
 // =====================================================================================================================
 // TIR À LA SOURIS (maintenir le clic = tir automatique)
@@ -4144,56 +3733,6 @@ const morphDuration = 2.0;   // durée du morph
 const pauseDuration = 5.0;   // durée de pause
 
 
-// =================
-// Fonction ouverture des portes
-// =================
-
-// BOX de detection
-
-const trigger = new THREE.Mesh(
-    new THREE.BoxGeometry(30, 20, 30),
-    new THREE.MeshBasicMaterial({ visible: false }), 
-);
-    trigger.position.set(0,0,-35);
-scene.add(trigger);
-
-
-
-// Ouverture
-
-let previousDoorState = false;
-
-function updateDoors(k = 1) {
-
-    if(!doorleft || !doorright) return;
-
-    const speed = 1 - Math.pow(1 - 0.05, k);
-    const openOffset = 12;
-
-    const targetLeftX  = doorState ? 12 - openOffset : -12;
-    const targetRightX = doorState ? -12 + openOffset : 12;
-
-    // 🔊 Joue le son seulement si l'état change
-    if (doorState !== previousDoorState) {
-        if (doorSound && doorSound.buffer) {
-            doorSound.play();
-        }
-        previousDoorState = doorState;
-    }
-
-    doorleft.position.x  = THREE.MathUtils.lerp(
-        doorleft.position.x,
-        targetLeftX,
-        speed
-    );
-
-    doorright.position.x = THREE.MathUtils.lerp(
-        doorright.position.x,
-        targetRightX,
-        speed
-    );
-}
-
 // =======================================================================
 // ENTER / EXIT SHIP
 //========================================================================
@@ -4337,12 +3876,11 @@ const bloom = createBloom(scene, camera, renderer);
 bolts.mesh.layers.enable(BLOOM_LAYER);
 fx.points.layers.enable(BLOOM_LAYER);
 landingBeacon.traverse(o => o.layers.enable(BLOOM_LAYER));
-ctrlPlane.layers.enable(BLOOM_LAYER);   // écran MAP holographique
 // (hyperespace, console du hangar, hologramme : volontairement SANS bloom)
 
 
 // Bouton de volume (voir src/ui/volume.js)
-initVolumeControl(audio, [video, video2, video3, video4, video5, ctrlscreen]);
+initVolumeControl(audio, [ctx.hyperspace.video, ...ctx.screens.videos, ctx.mapScreen.video]);
 
 const INTERIOR_CENTER = new THREE.Vector3(0, 0, 30);
 const INTERIOR_RANGE = 450;
@@ -4416,113 +3954,12 @@ function animate(){
     else updateCamera(dt);
     updateLanding(dt);
     
-    if (doorleft && doorright) {
-
-    const distance = player.position.distanceTo(trigger.position);
-
-    if (distance < 15) {
-        doorState = 1; // ouvrir
-    } else {
-        doorState = 0; // fermer
+    // (depuis l'origine, l'hyperespace n'est animé qu'une fois les portes chargées)
+    if (ctx.doors.ready()) {
+        ctx.doors.updateTrigger(player.position);
+        ctx.hyperspace.update(k);
     }
-
-    // pendant l'hyperespace : fond bleu nuit au lieu des étoiles (rien ne dépasse de l'écran)
-    if (screenMaterial) {
-        const hyper = screenMaterial.opacity > 0.5;
-        scene.background = hyper ? HYPERSPACE_BG : null;
-        sky.mesh.visible = !hyper;
-    }
-
-    if (isPlaying && screenMaterial && video) {
-    if (fadeState === "fadeIn") {
-        screenMaterial.opacity += fadeSpeed * k;
-        if (screenMaterial.opacity >= 1) {
-            screenMaterial.opacity = 1;
-            fadeState = "playing";
-        }
-    }
-    else if (fadeState === "playing") {
-        if (video.currentTime >= video.duration - 0.1 ) fadeState = "fadeOut";
-        
-    }
-    else if (fadeState === "fadeOut") {
-        screenMaterial.opacity -= fadeSpeed * k;
-        if (screenMaterial.opacity <= 0) {
-            boom.play();
-            screenMaterial.opacity = 0;
-            video.pause();
-            video.currentTime = 0;
-            fadeState = "idle";
-            isPlaying = false;
-            objectFade = "fadeIn"; // 👈 on relance l’apparition
-        }
-    }
-}
-
-
-
-// 🎬 Fade des objets 3D
-if (objectFade === "fadeOut") {
-
-    objectOpacity -= objectFadeSpeed * k;
-
-    objectsToFade.forEach(obj => {
-
-        const origin = obj.userData.originalPosition;
-        if (!origin) return; // évite le crash
-
-        obj.position.z = origin.z - (hyperMoveDistance * (1 - objectOpacity));
-
-        setOpacityRecursive(obj, objectOpacity);
-    });
-
-    if (objectOpacity <= 0) {
-        objectOpacity = 0;
-
-        objectsToFade.forEach(obj => {
-            obj.visible = false;
-        });
-
-        objectFade = "hidden";
-    }
-}
-
-else if (objectFade === "fadeIn") {
-
-    objectOpacity += objectFadeSpeed * k;
-
-    objectsToFade.forEach(obj => {
-
-        // 🔒 Si jamais la position originale n’existe pas,
-        // on la recrée automatiquement
-        if (!obj.userData.originalPosition) {
-            obj.userData.originalPosition = obj.position.clone();
-        }
-
-        const origin = obj.userData.originalPosition;
-
-        obj.visible = true;
-
-        obj.position.z = origin.z + (hyperMoveDistance * (1 - objectOpacity));
-
-        setOpacityRecursive(obj, objectOpacity);
-    });
-
-    if (objectOpacity >= 1) {
-
-        objectOpacity = 1;
-
-        objectsToFade.forEach(obj => {
-            if (obj.userData.originalPosition) {
-                obj.position.copy(obj.userData.originalPosition);
-            }
-        });
-
-        objectFade = "idle";
-    }
-}
-}
-    updateDoors(k);
+    ctx.doors.update(k);
     
 
     // ===== Hologram Fade =====
@@ -4622,7 +4059,7 @@ if (!alarmActive) {
     }
 
 
-    updateCtrlScreenFade(dt);
+    ctx.mapScreen.update(dt);
 
 
   // Mettre à jour les X-Wing seulement s'ils existent
