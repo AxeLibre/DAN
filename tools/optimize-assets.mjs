@@ -38,11 +38,19 @@ const SIMPLIFY = {
     'star_destroyer2.glb': 0.5   // les deux destroyers en orbite
 };
 
+// Modèles fusionnés en gardant certains objets à part (retrouvés par leur nom dans le code)
+const KEEP_NAMED = {
+    // Executor : la tourelle (cachée à l'intérieur), ses panneaux, la coque de collision
+    'star_executor_web.glb': /^(All_Tower|TowerGreebles1|MainHull)/
+};
+
 // Modèles dont les morceaux sont fusionnés (un seul morceau par matériau) :
 // moins d'appels de dessin → la bataille est beaucoup plus fluide.
 // Seulement des modèles NON animés dont le code n'utilise pas les noms internes.
 const MERGE = new Set([
-    'xwing.glb', 'y-wing.glb', 'tieinterlow.glb', 'liberty.glb', 'frigate.glb',
+    // (pas tieinterlow.glb : la fusion rendait son cockpit noir — normales abîmées.
+    //  Inutile de toute façon : les TIE sont instanciés, tous dessinés ensemble.)
+    'xwing.glb', 'y-wing.glb', 'liberty.glb', 'frigate.glb',
     'CR90_lite.glb', 'transport.glb', 'star_destroyer2.glb',
     'capital_part1.glb', 'capital_part2.glb', 'capital_part3.glb'
 ]);
@@ -68,6 +76,15 @@ for (const file of files) {
     if (!fs.existsSync(src)) { console.warn('introuvable :', src); continue; }
 
     const doc = await io.read(src);
+    if (KEEP_NAMED[file]) {
+        // fusion de tout SAUF les objets que le code retrouve par leur nom
+        const keep = KEEP_NAMED[file];
+        for (const node of doc.getRoot().listNodes()) {
+            if (keep.test(node.getName())) { if (node.getMesh()) node.getMesh().setName(node.getName()); }
+            else { node.setName(''); if (node.getMesh()) node.getMesh().setName(''); }
+        }
+        await doc.transform(flatten(), join({ keepNamed: true }));
+    }
     if (MERGE.has(file)) {
         // palette : les matériaux de couleur unie sont regroupés en un seul
         // (couleurs rangées dans une petite texture) → encore moins de morceaux

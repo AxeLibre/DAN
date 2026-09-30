@@ -6,7 +6,7 @@ import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js'; // même three.js que le reste (importmap en ligne, node_modules avec Vite)
-import { LaserBolts, ExplosionFX, CombatHUD, DebrisField, segmentSphere, LASER_GREEN, LASER_RED } from './weapons.js';
+import { LaserBolts, ExplosionFX, CombatHUD, DebrisField, InstancedShips, segmentSphere, LASER_GREEN, LASER_RED } from './weapons.js';
 import { RebelFleet } from './fleet.js';
 
 let scene, camera, renderer;
@@ -495,7 +495,10 @@ const skybox = new THREE.Mesh(
             varying vec3 vDir;
             void main() {
                 vDir = position;   // direction dans le repère du ciel (qui tourne)
-                gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                // seulement les ROTATIONS (caméra et ciel), jamais la position : le ciel est
+                // "à l'infini" et ne tremble plus quand la caméra est secouée par un tir
+                vec3 p = mat3(viewMatrix) * (mat3(modelMatrix) * position);
+                gl_Position = projectionMatrix * vec4(p, 1.0);
             }`,
         fragmentShader: /* glsl */`
             uniform samplerCube envMap;
@@ -515,7 +518,6 @@ skybox.rotation.x = 0.25;          // axe de rotation légèrement incliné
 scene.add(skybox);
 
 function updateSkybox(dt) {
-    camera.getWorldPosition(skybox.position);   // le ciel suit la caméra (toujours "à l'infini")
     skybox.rotation.y += SKY_SPEED * dt;
 }
 const HYPERSPACE_BG = new THREE.Color(0x0b2a66);   // fond pendant l'hyperespace (bleu du tunnel)
@@ -545,6 +547,7 @@ const loader2 = makeGLTFLoader();
 
 loader2.load('public/projecteur4.glb', (gltf)=>{
     const projector = gltf.scene;
+    projector.name = "bridge_shell";   // la coque de la passerelle + hangar (toujours affichée)
     projector.position.set(0,-12, 98.5);
     projector.scale.set(10,10,10);
     projector.rotation.y = Math.PI; // faire face à la caméra
@@ -599,13 +602,13 @@ loader4.load('public/star_executor_web.glb', (gltf) => {
         if (o.name === 'All_Tower' && !executorTower) executorTower = o;
         // panneaux lumineux collés devant les fenêtres du pont (hors du groupe All_Tower) :
         // ils se cachent / s'affichent avec la tourelle
-        if (o.name === 'TowerGreebles1') towerExtras.push(o);
+        if (/^TowerGreebles1/.test(o.name)) towerExtras.push(o);
         if (o.isMesh && /^MainHull/.test(o.name)) exteriorColliders.push(o);
     });
     towerExtras.forEach(o => { o.visible = false; });
+    executor.updateMatrixWorld(true);
+    hangarCut.toLocal.value.copy(executor.matrixWorld).invert();
     if (executorTower) {
-        executor.updateMatrixWorld(true);
-        hangarCut.toLocal.value.copy(executor.matrixWorld).invert();
         executorTower.traverse(o => {
             if (!o.isMesh) return;
             exteriorColliders.push(o);
@@ -615,7 +618,64 @@ loader4.load('public/star_executor_web.glb', (gltf) => {
         });
         executorTower.visible = false;
     }
+
+    // texture de coque projetée (les UV n'ont pas été dépliés après la décimation)
+    const done = new Set();
+    executor.traverse(o => {
+        if (!o.isMesh || !/ScratchedMetal/.test(o.material.name) || done.has(o.material)) return;
+        applyTriplanar(o.material);
+        done.add(o.material);
+    });
 });
+
+// -------------------------------------------------------------------
+// Texture "triplanaire" de la coque de l'Executor
+// -------------------------------------------------------------------
+// Le modèle décimé n'a pas d'UV dépliés : la texture de métal serait étirée n'importe
+// comment. À la place, le shader la projette selon les 3 axes (dessus / côtés / avant)
+// et mélange d'après l'orientation de chaque face. Pas besoin d'UV, taille constante.
+const EXECUTOR_TEX_SIZE = 8;   // taille d'un carreau de texture, en unités du modèle (×10 dans la scène)
+
+function applyTriplanar(material) {
+    const previous = material.onBeforeCompile;
+    const previousKey = material.customProgramCacheKey ? material.customProgramCacheKey() : '';
+    material.onBeforeCompile = (shader, renderer) => {
+        if (previous) previous(shader, renderer);
+        shader.uniforms.uTriToLocal = hangarCut.toLocal;          // monde → repère de l'Executor
+        shader.uniforms.uTriScale = { value: 1 / EXECUTOR_TEX_SIZE };
+        shader.vertexShader = shader.vertexShader
+            .replace('#include <common>', '#include <common>\nuniform mat4 uTriToLocal;\nvarying vec3 vTriPos;\nvarying vec3 vTriN;')
+            .replace('#include <defaultnormal_vertex>', '#include <defaultnormal_vertex>\nvTriN = normalize(mat3(uTriToLocal) * mat3(modelMatrix) * objectNormal);')
+            .replace('#include <begin_vertex>', '#include <begin_vertex>\nvTriPos = (uTriToLocal * modelMatrix * vec4(transformed, 1.0)).xyz;');
+        shader.fragmentShader = shader.fragmentShader
+            .replace('#include <common>', '#include <common>\nuniform float uTriScale;\nvarying vec3 vTriPos;\nvarying vec3 vTriN;')
+            .replace('#include <map_fragment>', `
+                vec3 triW = pow(abs(normalize(vTriN)), vec3(4.0));
+                triW /= (triW.x + triW.y + triW.z);
+                vec3 triP = vTriPos * uTriScale;
+                #ifdef USE_MAP
+                    diffuseColor *= texture2D(map, triP.zy) * triW.x
+                                  + texture2D(map, triP.xz) * triW.y
+                                  + texture2D(map, triP.xy) * triW.z;
+                #endif`)
+            .replace('#include <roughnessmap_fragment>', `
+                float roughnessFactor = roughness;
+                #ifdef USE_ROUGHNESSMAP
+                    roughnessFactor *= texture2D(roughnessMap, triP.zy).g * triW.x
+                                     + texture2D(roughnessMap, triP.xz).g * triW.y
+                                     + texture2D(roughnessMap, triP.xy).g * triW.z;
+                #endif`)
+            .replace('#include <metalnessmap_fragment>', `
+                float metalnessFactor = metalness;
+                #ifdef USE_METALNESSMAP
+                    metalnessFactor *= texture2D(metalnessMap, triP.zy).b * triW.x
+                                     + texture2D(metalnessMap, triP.xz).b * triW.y
+                                     + texture2D(metalnessMap, triP.xy).b * triW.z;
+                #endif`);
+    };
+    material.customProgramCacheKey = () => previousKey + '|triplanar';
+    material.needsUpdate = true;
+}
 
 // -------------------------------------------------------------------
 // Sortie du hangar à travers l'arrière de la tourelle
@@ -1336,6 +1396,7 @@ loader12.load('public/tie_fighter0.glb', (gltf) => {
     if (gltf.animations.length > 0) {
         const action = mixer1.clipAction(gltf.animations[0]);
         action.play();
+        mixer1.alwaysUpdate = true;   // visible aussi de dehors
         mixers.push(mixer1);
 }
 
@@ -2558,11 +2619,23 @@ gltfLoader.load('public/y-wing.glb', (gltf) => {
     for (let i = 0; i < YWING_POOL; i++) createXwing(ywingModel, 'ywing');
 });
 
+// Un "dessinateur" par type de chasseur : tous les vaisseaux du même modèle sont
+// dessinés ensemble (voir InstancedShips dans weapons.js). Les vaisseaux eux-mêmes
+// ne sont plus que des Group vides qui portent position / rotation / visible.
+const shipInstancers = {};   // 'xwing' | 'ywing' | 'tie'
+function instancerFor(kind, template, max, setup) {
+    if (!shipInstancers[kind]) {
+        const model = template.clone();
+        if (setup) setup(model);
+        shipInstancers[kind] = new InstancedShips(scene, model, max);
+    }
+    return shipInstancers[kind];
+}
+
 function createXwing(template = xwingModel, kind = 'xwing') {
     const enemy = new THREE.Group();
-    const model = template.clone();
-    if (kind === 'xwing') model.rotation.y = 0;
-    enemy.add(model);
+    instancerFor(kind, template, kind === 'xwing' ? XWING.POOL : YWING_POOL,
+        model => { if (kind === 'xwing') model.rotation.y = 0; }).add(enemy);
     enemy.visible = false;
     enemy.userData = {
         kind,
@@ -3351,7 +3424,17 @@ const PATROL = {
 const patrols = [];
 const prand = (a, b) => a + Math.random() * (b - a);
 
+// Les TIE des patrouilles sont instanciés (dessinés ensemble), avec leurs PROPRES
+// matériaux : on peut les estomper pendant l'hyperespace sans toucher aux TIE de la bataille.
+let patrolInstancer = null;
+let patrolFaded = false;
+
 function createPatrols() {
+    const model = tieModel.clone();
+    model.rotation.y = Math.PI;
+    model.traverse(o => { if (o.isMesh) o.material = o.material.clone(); });
+    patrolInstancer = new InstancedShips(scene, model, PATROL.GROUPS * PATROL.SLOTS.length);
+
     for (let g = 0; g < PATROL.GROUPS; g++) {
         const p = {
             angle: Math.random() * Math.PI * 2,
@@ -3364,12 +3447,7 @@ function createPatrols() {
         p.radiusTarget = p.radius; p.altTarget = p.alt; p.speedTarget = p.speed;
         PATROL.SLOTS.forEach(() => {
             const tie = new THREE.Group();
-            const model = tieModel.clone();
-            model.rotation.y = Math.PI;
-            // matériaux propres : on peut les estomper (hyperespace) sans toucher aux TIE de la bataille
-            model.traverse(o => { if (o.isMesh) o.material = o.material.clone(); });
-            tie.add(model);
-            scene.add(tie);
+            patrolInstancer.add(tie);
             p.members.push(tie);
         });
         patrols.push(p);
@@ -3426,19 +3504,23 @@ function updatePatrols(dt) {
             // hyperespace
             tie.visible = shown;
             tie.position.z += hyperOffset;
-            if (fading || tie.userData.faded) {
-                setOpacityRecursive(tie, fading ? objectOpacity : 1);
-                tie.userData.faded = fading;
-            }
         });
     });
+
+    // fondu pendant l'hyperespace (tous les TIE de patrouille partagent ces matériaux)
+    if (fading || patrolFaded) {
+        for (const part of patrolInstancer.parts) {
+            part.mesh.material.transparent = fading;
+            part.mesh.material.opacity = fading ? objectOpacity : 1;
+        }
+        patrolFaded = fading;
+    }
+    patrolInstancer.update();
 }
 
 function createTie() {
     const tie = new THREE.Group();
-    const model = tieModel.clone();
-    model.rotation.y = Math.PI;
-    tie.add(model);
+    instancerFor('tie', tieModel, TIE_WING.POOL, model => { model.rotation.y = Math.PI; }).add(tie);
     tie.visible = false;
     tie.userData = {
         phase: 'pool',
@@ -4994,6 +5076,58 @@ function renderWithBloom() {
     renderer.autoClear = true;
 }
 
+// =========================================================================================
+// VOLUME — petit bouton discret en haut à gauche
+// =========================================================================================
+// Clic sur le haut-parleur : couper / remettre le son. Survol : curseur de volume.
+// Règle TOUT : effets, sons spatialisés, ambiance et vidéos. Mémorisé d'une visite à l'autre.
+let masterVolume = 1;
+function setMasterVolume(v) {
+    masterVolume = THREE.MathUtils.clamp(v, 0, 1);
+    [listener, listener2, listener3, listener4].forEach(l => l.setMasterVolume(masterVolume));
+    ambientEl.volume = 0.5 * masterVolume;
+    [video, video2, video3, video4, video5, ctrlscreen].forEach(el => { el.volume = masterVolume; });
+    try { localStorage.setItem('dan-volume', String(masterVolume)); } catch (e) { /* stockage indisponible */ }
+    volumeIcon.textContent = masterVolume === 0 ? '🔇' : masterVolume < 0.5 ? '🔉' : '🔊';
+    volumeSlider.value = String(Math.round(masterVolume * 100));
+}
+
+const volumeBox = document.createElement('div');
+volumeBox.style.cssText = 'position:fixed;top:12px;left:12px;z-index:99999;display:flex;align-items:center;gap:8px;' +
+    'padding:4px 8px;border-radius:18px;background:rgba(0,0,0,.35);opacity:.35;transition:opacity .25s;user-select:none;';
+const volumeIcon = document.createElement('div');
+volumeIcon.style.cssText = 'font-size:18px;cursor:pointer;line-height:1;';
+volumeIcon.title = 'Son';
+const volumeSlider = document.createElement('input');
+volumeSlider.type = 'range';
+volumeSlider.min = '0'; volumeSlider.max = '100';
+volumeSlider.tabIndex = -1;
+volumeSlider.style.cssText = 'width:0;opacity:0;transition:width .25s,opacity .25s;accent-color:#FFE81F;cursor:pointer;';
+volumeBox.append(volumeIcon, volumeSlider);
+document.body.appendChild(volumeBox);
+
+volumeBox.addEventListener('mouseenter', () => { volumeBox.style.opacity = '1'; volumeSlider.style.width = '90px'; volumeSlider.style.opacity = '1'; });
+volumeBox.addEventListener('mouseleave', () => { volumeBox.style.opacity = '.35'; volumeSlider.style.width = '0'; volumeSlider.style.opacity = '0'; });
+let volumeBeforeMute = 1;
+volumeIcon.addEventListener('click', () => {
+    if (masterVolume > 0) { volumeBeforeMute = masterVolume; setMasterVolume(0); }
+    else setMasterVolume(volumeBeforeMute || 1);
+});
+volumeSlider.addEventListener('input', () => setMasterVolume(Number(volumeSlider.value) / 100));
+// ne jamais garder le clavier : les flèches servent à piloter
+volumeSlider.addEventListener('change', () => volumeSlider.blur());
+volumeSlider.addEventListener('keydown', e => e.preventDefault());
+
+{
+    let saved = 1;
+    try { const s = localStorage.getItem('dan-volume'); if (s !== null && !isNaN(Number(s))) saved = Number(s); } catch (e) { /* ignore */ }
+    setMasterVolume(saved);
+}
+
+const INTERIOR_CENTER = new THREE.Vector3(0, 0, 30);
+const INTERIOR_RANGE = 450;
+let interiorWasOn = true;
+
 let envBlink = 0;
 let envToggle = false;
 let levitationClock = new THREE.Clock();
@@ -5044,7 +5178,16 @@ function animate(){
         }
     }
 
-    mixers.forEach(m => m.update(dt));
+    // Intérieur de la passerelle (16 personnages animés, droïdes, portes…) : inutile de
+    // l'animer et de le dessiner quand on vole loin de la tour, il est invisible de là.
+    const interiorOn = isInsideShip || player.position.distanceToSquared(INTERIOR_CENTER) < INTERIOR_RANGE * INTERIOR_RANGE;
+    if (interiorOn !== interiorWasOn) {
+        interiorWasOn = interiorOn;
+        for (const child of worldGroup.children) {
+            if (child.name !== 'tie_fighter0' && child.name !== 'bridge_shell') child.visible = interiorOn;
+        }
+    }
+    mixers.forEach(m => { if (interiorOn || m.alwaysUpdate) m.update(dt); });
 
     // rotation du pivot autour de Y
     pivot.rotation.y -= 0.001 * k; // vitesse de rotation
@@ -5279,6 +5422,7 @@ if (!alarmActive) {
     rebelFleet.update(dt);
     debris.update(dt);
 
+    for (const kind in shipInstancers) shipInstancers[kind].update();   // chasseurs instanciés
     bolts.update(dt);
     fx.update(dt, camera, renderer);
     updateCombatHud(dt);
