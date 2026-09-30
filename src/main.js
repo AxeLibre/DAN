@@ -7,6 +7,8 @@ import { loadingManager, makeGLTFLoader, initLoadingScreen } from './core/loader
 import { createStage, handleResize } from './core/stage.js';
 import { createSkybox, HYPERSPACE_BG } from './core/skybox.js';
 import { createBloom, BLOOM_LAYER, enableBloom } from './core/bloom.js';
+import { initAudio } from './audio.js';
+import { initVolumeControl } from './ui/volume.js';
 
 let particleSystem, material;
 let mouse = new THREE.Vector3();
@@ -17,13 +19,10 @@ let clock = new THREE.Clock();
 let isPlaying = false;        // ✅ contrôle si l’animation de l’écran est en cours
 let fadeState = "idle";  // "idle" | "fadeIn" | "playing" | "fadeOut"
 let fadeSpeed = 0.02;
-let ambientSound;
-let ambientStarted = false;
 let hologramActive = false;   // état logique ON/OFF
 let hologramOpacity = 0;     // valeur actuelle
 let hologramTarget = 0;      // 0 ou 1
 const hologramFadeSpeed = 0.03;
-let doorSound;
 let playerBox = new THREE.Box3();
 let isInsideShip = true;
 let playerState = "walk"; // "walk" | "flight"
@@ -41,20 +40,10 @@ const flightSpeed = 1; // 🚀 plus rapide
 let currentFlightSpeed = 1; // pour accélération progressive
 const maxFlightSpeed = 1;
 const acceleration = 0.05;
-let ambienttie; 
-let tieOn;
-let tieOff;
 let objectFade = "idle"; // "fadeOut" | "hidden" | "fadeIn"
 let objectOpacity = 1;
 const objectFadeSpeed = 0.02;
-let open;
-let transittionsound;
-let button1;
-let button2;
-let button3;
 let poweroff;
-let explosion;
-let boom;
 let ctrlScreenVisible = false;
 let ctrlScreenFadeDirection = 0; // 1 = fade in, -1 = fade out
 const ctrlScreenFadeSpeed = 1.5;
@@ -66,7 +55,6 @@ let blinkTime = 0;
 let panelMixer;
 let panelAction;
 
-let alarmSound;
 let alarmActive = false; // état ON/OFF
 let cockpitFloatTime = 0;
 let videoTexture;
@@ -85,11 +73,8 @@ let tiePlayer1;
 let tiefighter;
 let tieinterceptor;
 let tiesilencer;
-let tiechange; 
 let cannonActive = false;
 let lasers = [];
-let laseron;
-let laseroff;
 let cannonTargetY = -20;
 let cannonHiddenY = -20;
 let cannonVisibleY = 0;
@@ -102,7 +87,6 @@ let xwingModel = null;      // Modèle X-Wing
 let enemyLasers = [];       // Lasers rouges (X-Wing)
 let friendlyLasers = [];    // Lasers verts (TIE)
 let explosions = [];                    // Explosions vidéo
-const listener = new THREE.AudioListener();
 let collisionMeshInterior;
 let collisionMeshExterior;
 let collisionShip;
@@ -138,18 +122,7 @@ videoTexture.flipY = false;
 
 
 
-initLoadingScreen(() => {
-
-    // débloque le contexte audio
-
-    camera.add(listener);
-
-    if (ambientSound && ambientSound.buffer) {
-        ambientSound.play();
-        ambientStarted = true;
-    }
-    open.play();
-});
+initLoadingScreen(() => audio.unlock());
 
 
 
@@ -158,237 +131,14 @@ initLoadingScreen(() => {
 // ==================
 const { scene, camera, renderer, env } = createStage();
 
-// AMBIANCE SOUND
-
-const listener2 = new THREE.AudioListener();
-camera.add(listener2);
-const audioLoader = new THREE.AudioLoader();
-const audioLoader2 = new THREE.AudioLoader();
-
-// Ambiance : 53 minutes de son. Avant, le fichier était entièrement téléchargé puis
-// décodé en mémoire (~1 Go de RAM !). Il est maintenant lu en streaming par le
-// navigateur. Même utilisation qu'avant : play(), stop(), isPlaying, buffer.
-const ambientEl = new Audio('public/ambient.mp3');
-ambientEl.loop = true;      // ambiance en boucle
-ambientEl.volume = 0.5;     // volume doux
-ambientEl.preload = 'none';
-ambientSound = {
-    buffer: true,
-    get isPlaying() { return !ambientEl.paused; },
-    play() { ambientEl.play().catch(() => {}); },
-    stop() { ambientEl.pause(); }
-};
-
-ambienttie = new THREE.Audio(listener2);
-
-audioLoader2.load('public/tie_int2.WAV', function(buffer) {
-    ambienttie.setBuffer(buffer);
-    ambienttie.setLoop(true);   // ambiance en boucle
-    ambienttie.setVolume(0.5);  // volume doux
-});
-
-
-
-// AUTRES SONS
-
-const listener3 = new THREE.AudioListener();
-camera.add(listener3);
-
-const audioLoader3 = new THREE.AudioLoader();
-
-
-const ctrlscreenon = new THREE.Audio(listener3);
-
-audioLoader3.load('public/sounds/holo_on.mp3', buffer => {
-    ctrlscreenon.setBuffer(buffer);
-    ctrlscreenon.setVolume(1.5);
-});
-
-
-
-
-const ctrlscreenoff = new THREE.Audio(listener3);
-
-audioLoader3.load('public/sounds/ctrlscreenoff.mp3', buffer => {
-    ctrlscreenoff.setBuffer(buffer);
-    ctrlscreenoff.setVolume(1.5);
-});
-
-const holoOnSound = new THREE.Audio(listener3);
-
-audioLoader3.load('public/sounds/holo_off.mp3', buffer => {
-    holoOnSound.setBuffer(buffer);
-    holoOnSound.setVolume(0.6);
-});
-
-const holoOffSound2 = new THREE.Audio(listener3);
-
-audioLoader3.load('public/sounds/holooff.mp3', buffer => {
-    holoOffSound2.setBuffer(buffer);
-    holoOffSound2.setVolume(0.6);
-});
-
-
-tieOn = new THREE.Audio(listener3);
-
-audioLoader2.load('public/tie_on.WAV', function(buffer) {
-    tieOn.setBuffer(buffer);
-    tieOn.setLoop(false);   // ambiance en boucle
-    tieOn.setVolume(0.9);  // volume doux
-});
-
-tieOff = new THREE.Audio(listener3);
-
-audioLoader2.load('public/tie_off.mp3', function(buffer) {
-    tieOff.setBuffer(buffer);
-    tieOff.setLoop(false);   // ambiance en boucle
-    tieOff.setVolume(0.9);  // volume doux
-});
-
-open = new THREE.Audio(listener3);
-
-audioLoader2.load('public/open.mp3', function(buffer) {
-    open.setBuffer(buffer);
-    open.setLoop(false);   // ambiance en boucle
-    open.setVolume(0.9);  // volume doux
-});
-
-transittionsound = new THREE.Audio(listener3);
-
-audioLoader2.load('public/transition.mp3', function(buffer) {
-    transittionsound.setBuffer(buffer);
-    transittionsound.setLoop(false);   // ambiance en boucle
-    transittionsound.setVolume(0.9);  // volume doux
-});
-
-button1 = new THREE.Audio(listener3);
-
-audioLoader2.load('public/bipbip1.WAV', function(buffer) {
-    button1.setBuffer(buffer);
-    button1.setLoop(false);   // ambiance en boucle
-    button1.setVolume(0.9);  // volume doux
-});
-
-button2 = new THREE.Audio(listener3);
-
-audioLoader2.load('public/bipbip2.WAV', function(buffer) {
-    button2.setBuffer(buffer);
-    button2.setLoop(false);   // ambiance en boucle
-    button2.setVolume(0.9);  // volume doux
-});
-
-button3 = new THREE.Audio(listener3);
-
-audioLoader2.load('public/bipbip3.mp3', function(buffer) {
-    button3.setBuffer(buffer);
-    button3.setLoop(false);   // ambiance en boucle
-    button3.setVolume(0.9);  // volume doux
-});
-
-tiechange = new THREE.Audio(listener3);
-
-audioLoader2.load('public/tiechange.WAV', function(buffer) {
-    tiechange.setBuffer(buffer);
-    tiechange.setLoop(false);   
-    tiechange.setVolume(1.0);  
-});
-
-laseron = new THREE.Audio(listener3);
-
-audioLoader2.load('public/laseron.mp3', function(buffer) {
-    laseron.setBuffer(buffer);
-    laseron.setLoop(false);   
-    laseron.setVolume(2.0);  
-});
-
-laseroff = new THREE.Audio(listener3);
-
-audioLoader2.load('public/laseroff.mp3', function(buffer) {
-    laseroff.setBuffer(buffer);
-    laseroff.setLoop(false);   
-    laseroff.setVolume(2.0);  
-});
-
-explosion = new THREE.Audio(listener3);
-
-audioLoader2.load('public/explosion.mp3', function(buffer) {
-    explosion.setBuffer(buffer);
-    explosion.setLoop(false);   
-    explosion.setVolume(2.0);  
-});
-
-boom = new THREE.Audio(listener3);
-
-audioLoader2.load('public/boom.mp3', function(buffer) {
-    boom.setBuffer(buffer);
-    boom.setLoop(false);   
-    boom.setVolume(2.0);  
-});
-
-// Son des portes
-doorSound = new THREE.Audio(listener3);  
-
-audioLoader2.load('public/door.mp3', function(buffer) { 
-    doorSound.setBuffer(buffer);
-    doorSound.setVolume(0.5);
-});
-
-button2 = new THREE.Audio(listener3);
-
-audioLoader2.load('public/bipbip6.WAV', function(buffer) {
-    button2.setBuffer(buffer);
-    button2.setLoop(false);   
-    button2.setVolume(2.0);  
-});
-
-button1 = new THREE.Audio(listener3);
-
-audioLoader2.load('public/bipbip1.WAV', function(buffer) {
-    button1.setBuffer(buffer);
-    button1.setLoop(false);   
-    button1.setVolume(2.0);  
-});
-
-button3 = new THREE.Audio(listener3);
-
-audioLoader2.load('public/sounds/button0.mp3', function(buffer) {
-    button3.setBuffer(buffer);
-    button3.setLoop(false);   
-    button3.setVolume(2.0);  
-});
-
-// Son collision métallique                                    *********************
-const metalCollisionSound = new THREE.Audio(listener);
-audioLoader2.load('public/sounds/metal_impact.mp3', function(buffer) {
-    metalCollisionSound.setBuffer(buffer);
-    metalCollisionSound.setLoop(false);
-    metalCollisionSound.setVolume(0.8);
-});
-
-
-// 🎧 Listener
-const listener4 = new THREE.AudioListener();
-camera.add(listener4);
-
-// 🎧 Son R2
-const R2 = new THREE.Audio(listener4);
-
-const audioLoader4 = new THREE.AudioLoader();
-audioLoader4.load('public/R2.WAV', function(buffer) {
-    R2.setBuffer(buffer);
-    R2.setVolume(0.8);
-});
-
-function playSoundSafe(sound) {
-    if (!sound || !sound.buffer) return;
-
-    if (sound.isPlaying) {
-        sound.stop();
-    }
-
-    sound.play();
-}
-
+// ==================
+// SONS (voir src/audio.js)
+// ==================
+const audio = initAudio(scene, camera);
+const { listener, playSoundSafe, playVoice, playAt, sfx, laserSoundAt } = audio;
+const { ambientSound, ambienttie, ctrlscreenon, ctrlscreenoff, holoOnSound, holoOffSound2, tieOn, tieOff, open,
+        transittionsound, button1, button2, button3, tiechange, laseron, laseroff, explosion, boom, doorSound,
+        metalCollisionSound, R2, alarmSound, tieLaserVoices } = audio.sounds;
 
 
 
@@ -2075,22 +1825,6 @@ let cameraShake = 0;
 let fireHeldMouse = false;
 let fireHeldSpace = false;
 
-// Petits "pools" de sons : plusieurs tirs rapides peuvent se chevaucher
-function makeVoices(url, volume, count = 4) {
-    const voices = [];
-    for (let i = 0; i < count; i++) voices.push(new THREE.Audio(listener));
-    voices.next = 0;
-    audioLoader.load(url, (buffer) => voices.forEach(v => { v.setBuffer(buffer); v.setVolume(volume); }));
-    return voices;
-}
-function playVoice(voices) {
-    const v = voices[voices.next];
-    voices.next = (voices.next + 1) % voices.length;
-    if (!v.buffer) return;
-    if (v.isPlaying) v.stop();
-    v.play();
-}
-
 // 🔊 LASER SOUND (canon de la passerelle)
 // (le son du canon est maintenant spatialisé : voir sfx.laser plus bas)
 
@@ -2304,15 +2038,6 @@ function onPlayerBoltHit(bolt, hit) {
 // =========================================================
 
 
-// 🔊 Son d'alarme
-alarmSound = new THREE.Audio(listener);
-
-audioLoader.load('public/alarm.mp3', (buffer) => {
-    alarmSound.setBuffer(buffer);
-    alarmSound.setLoop(true);   // boucle infinie
-    alarmSound.setVolume(0.2);
-});
-
 // Chargement du panneau GLB
 
 const panelLoader = makeGLTFLoader();
@@ -2402,8 +2127,6 @@ let tieGunSide = 0;
 let tieGunCooldown = 0;
 let tieLock = null;
 
-// 🔊 TIE LASER SOUND
-const tieLaserVoices = makeVoices('public/tielaser.mp3', 0.8);
 
 function updateTieGuns(dt) {
     tieGunCooldown -= dt;
@@ -4096,10 +3819,7 @@ document.addEventListener("keydown", (event) => {
   if(keys.hasOwnProperty(event.key)) {
 
     // 🔊 démarre ambiance au premier mouvement
-    if (!ambientStarted && ambientSound && ambientSound.buffer) {
-      ambientSound.play();
-      ambientStarted = true;
-    }
+    audio.startAmbient();
 
     keys[event.key] = true;
   }
@@ -4671,44 +4391,6 @@ function enableWalkMode() {
     refreshHud();
 }
 
-// SON
-
-function switchToShipAudio() {
-
-    if (ambienttie && ambienttie.isPlaying) {
-        ambienttie.stop();
-    }
-
-    if (tieOff && tieOff.buffer) {
-        tieOff.play();
-    }
-
-    setTimeout(() => {
-        if (ambientSound && !ambientSound.isPlaying) {
-            ambientSound.play();
-        }
-    }, 1000);
-    
-}
-
-function switchToFlightAudio() {
-
-    if (ambientSound && ambientSound.isPlaying) {
-        ambientSound.stop();
-    }
-
-    if (tieOn && tieOn.buffer) {
-        tieOn.play();
-    }
-
-    // attendre la fin du son tieOn (~1.5s par exemple)
-    setTimeout(() => {
-        if (ambienttie && !ambienttie.isPlaying) {
-            ambienttie.play();
-        }
-    }, 1500);
-}
-
 // FONCTION
 
 function exitShip() {
@@ -4719,7 +4401,7 @@ function exitShip() {
     if (tiePlayer) tiePlayer.visible = false;
     if (cockpit) cockpit.visible = true;
 
-    switchToFlightAudio();
+    audio.switchToFlightAudio();
 
     enableFlightMode();
 
@@ -4736,7 +4418,7 @@ function enterShip() {
     if (tiePlayer) tiePlayer.visible = true;
     if (cockpit) cockpit.visible = false;
 
-    switchToShipAudio();
+    audio.switchToShipAudio();
 
     enableWalkMode();
 }
@@ -4799,73 +4481,9 @@ function onButtonClick() {
 
 
 
-// =========================================================================================
-// SON SPATIALISÉ (explosions, lasers, bips du droïde)
-// =========================================================================================
-// Chaque son est joué à l'endroit où il se produit : plus fort quand c'est proche,
-// à gauche / à droite selon sa position. Petits groupes de "voix" réutilisées.
-function makePositionalPool(urls, count, volume, refDistance) {
-    const list = Array.isArray(urls) ? urls : [urls];
-    const pool = { voices: [], buffers: [], volume, next: 0, last: 0 };
-    list.forEach((url, i) => audioLoader.load(url, b => { pool.buffers[i] = b; }));
-    for (let i = 0; i < count; i++) {
-        const holder = new THREE.Object3D();
-        const voice = new THREE.PositionalAudio(listener);
-        voice.setRefDistance(refDistance);
-        voice.setRolloffFactor(1);
-        voice.setDistanceModel('inverse');
-        holder.add(voice);
-        scene.add(holder);
-        pool.voices.push({ holder, voice });
-    }
-    return pool;
-}
-
-/** Joue un son du groupe à une position (minGap : délai mini entre deux sons du groupe). */
-function playAt(pool, position, volumeMul = 1, minGap = 0.05, rate = 1) {
-    const now = performance.now() * 0.001;
-    const buffers = pool.buffers.filter(Boolean);
-    if (!buffers.length || now - pool.last < minGap) return;
-    pool.last = now;
-    const v = pool.voices[pool.next];
-    pool.next = (pool.next + 1) % pool.voices.length;
-    if (v.voice.isPlaying) v.voice.stop();
-    v.voice.setBuffer(buffers[Math.floor(Math.random() * buffers.length)]);
-    v.voice.setVolume(pool.volume * volumeMul);
-    v.voice.setPlaybackRate(rate);
-    v.holder.position.copy(position);
-    v.holder.updateMatrixWorld();
-    v.voice.play();
-}
-
-const sfx = {
-    explosion: makePositionalPool('public/explosion.mp3', 8, 1.6, 160),
-    boom:      makePositionalPool('public/boom.mp3', 4, 2.2, 400),
-    laser:     makePositionalPool('public/laser.mp3', 8, 0.5, 120),       // tirs rouges (canon, X-Wing)
-    tieLaser:  makePositionalPool('public/tielaser.mp3', 8, 0.6, 120),    // tirs verts des TIE
-    r2:        makePositionalPool(['public/R2.WAV', 'public/R2 1.WAV', 'public/R2 2.WAV', 'public/R2 3.WAV',
-                                   'public/R2 4.WAV', 'public/R2 5.WAV', 'public/R2 7.WAV', 'public/R2 8.WAV',
-                                   'public/R2 9.WAV'], 2, 1.0, 25)
-};
-
-// Toutes les explosions GLSL font maintenant du bruit, là où elles ont lieu
+// Toutes les explosions GLSL font du bruit, là où elles ont lieu (voir src/audio.js)
+audio.attachExplosionSounds(fx);
 const _cameraWorld = new THREE.Vector3();
-const _explosionFX = fx.explosion.bind(fx);
-fx.explosion = (pos, radius = 15, tint) => {
-    _explosionFX(pos, radius, tint);
-    camera.getWorldPosition(_cameraWorld);
-    if (pos.distanceTo(_cameraWorld) > 5000) return;
-    const vol = THREE.MathUtils.clamp(radius / 20, 0.5, 2.5);
-    if (radius >= 60) playAt(sfx.boom, pos, vol / 2, 0.25, 0.9 + Math.random() * 0.2);
-    else playAt(sfx.explosion, pos, vol, 0.06, 0.85 + Math.random() * 0.3);
-};
-
-// Tirs des vaisseaux de la bataille (limités pour ne pas saturer)
-function laserSoundAt(pos, rebel) {
-    camera.getWorldPosition(_cameraWorld);
-    if (pos.distanceTo(_cameraWorld) > 1200) return;
-    playAt(rebel ? sfx.laser : sfx.tieLaser, pos, 1, 0.12, 0.9 + Math.random() * 0.2);
-}
 
 // ---------------- Bips du droïde quand il passe près de la caméra ----------------
 let droidBody = null;
@@ -4904,53 +4522,8 @@ ctrlPlane.layers.enable(BLOOM_LAYER);   // écran MAP holographique
 // (hyperespace, console du hangar, hologramme : volontairement SANS bloom)
 
 
-// =========================================================================================
-// VOLUME — petit bouton discret en haut à gauche
-// =========================================================================================
-// Clic sur le haut-parleur : couper / remettre le son. Survol : curseur de volume.
-// Règle TOUT : effets, sons spatialisés, ambiance et vidéos. Mémorisé d'une visite à l'autre.
-let masterVolume = 1;
-function setMasterVolume(v) {
-    masterVolume = THREE.MathUtils.clamp(v, 0, 1);
-    [listener, listener2, listener3, listener4].forEach(l => l.setMasterVolume(masterVolume));
-    ambientEl.volume = 0.5 * masterVolume;
-    [video, video2, video3, video4, video5, ctrlscreen].forEach(el => { el.volume = masterVolume; });
-    try { localStorage.setItem('dan-volume', String(masterVolume)); } catch (e) { /* stockage indisponible */ }
-    volumeIcon.textContent = masterVolume === 0 ? '🔇' : masterVolume < 0.5 ? '🔉' : '🔊';
-    volumeSlider.value = String(Math.round(masterVolume * 100));
-}
-
-const volumeBox = document.createElement('div');
-volumeBox.style.cssText = 'position:fixed;top:12px;left:12px;z-index:99999;display:flex;align-items:center;gap:8px;' +
-    'padding:4px 8px;border-radius:18px;background:rgba(0,0,0,.35);opacity:.35;transition:opacity .25s;user-select:none;';
-const volumeIcon = document.createElement('div');
-volumeIcon.style.cssText = 'font-size:18px;cursor:pointer;line-height:1;';
-volumeIcon.title = 'Son';
-const volumeSlider = document.createElement('input');
-volumeSlider.type = 'range';
-volumeSlider.min = '0'; volumeSlider.max = '100';
-volumeSlider.tabIndex = -1;
-volumeSlider.style.cssText = 'width:0;opacity:0;transition:width .25s,opacity .25s;accent-color:#FFE81F;cursor:pointer;';
-volumeBox.append(volumeIcon, volumeSlider);
-document.body.appendChild(volumeBox);
-
-volumeBox.addEventListener('mouseenter', () => { volumeBox.style.opacity = '1'; volumeSlider.style.width = '90px'; volumeSlider.style.opacity = '1'; });
-volumeBox.addEventListener('mouseleave', () => { volumeBox.style.opacity = '.35'; volumeSlider.style.width = '0'; volumeSlider.style.opacity = '0'; });
-let volumeBeforeMute = 1;
-volumeIcon.addEventListener('click', () => {
-    if (masterVolume > 0) { volumeBeforeMute = masterVolume; setMasterVolume(0); }
-    else setMasterVolume(volumeBeforeMute || 1);
-});
-volumeSlider.addEventListener('input', () => setMasterVolume(Number(volumeSlider.value) / 100));
-// ne jamais garder le clavier : les flèches servent à piloter
-volumeSlider.addEventListener('change', () => volumeSlider.blur());
-volumeSlider.addEventListener('keydown', e => e.preventDefault());
-
-{
-    let saved = 1;
-    try { const s = localStorage.getItem('dan-volume'); if (s !== null && !isNaN(Number(s))) saved = Number(s); } catch (e) { /* ignore */ }
-    setMasterVolume(saved);
-}
+// Bouton de volume (voir src/ui/volume.js)
+initVolumeControl(audio, [video, video2, video3, video4, video5, ctrlscreen]);
 
 const INTERIOR_CENTER = new THREE.Vector3(0, 0, 30);
 const INTERIOR_RANGE = 450;
