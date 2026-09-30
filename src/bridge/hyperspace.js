@@ -233,10 +233,12 @@ export function initHyperspace(ctx) {
         const dt = k / LEGACY_TICK_RATE;
         const { state } = ctx;
 
-        // après le flash : les étoiles encore étirées se résorbent
+        // après le flash : les étoiles encore étirées se résorbent, PUIS les vaisseaux
+        // extérieurs réapparaissent (comme dans les films : l'échelle revient après le saut)
         if (arrivalT > 0) {
             arrivalT = Math.max(0, arrivalT - dt / ARRIVAL_STREAK_TIME);
             setStreaks(arrivalT * arrivalT);
+            if (arrivalT === 0) fade.state = "fadeIn"; // 👈 on relance l’apparition
         }
 
         // pendant l'hyperespace : fond bleu nuit au lieu des étoiles (rien ne dépasse de l'écran)
@@ -268,12 +270,11 @@ export function initHyperspace(ctx) {
                 if (t < FLASH_PEAK) {
                     setFlash(t / FLASH_PEAK);
                 } else {
-                    // au plus fort du flash : le tunnel disparaît dessous, les objets reviennent
+                    // au plus fort du flash : le tunnel disparaît dessous
                     if (!exited) {
                         exited = true;
                         ctx.audio.sounds.boom.play();
                         screenMaterial.opacity = 0;
-                        fade.state = "fadeIn"; // 👈 on relance l’apparition
                     }
                     const u = (t - FLASH_PEAK) / (FLASH_TIME - FLASH_PEAK);
                     setFlash(Math.max(0, 1 - u * u));
