@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { makeGLTFLoader } from '../core/loaders.js';
 import { HYPERSPACE_BG } from '../core/skybox.js';
+import { LEGACY_TICK_RATE } from '../core/constants.js';
 
 // =========================================================================================
 // SAUT EN HYPERESPACE (bouton bleu de la console)
@@ -25,6 +26,75 @@ const WINDOW_LIGHTS = [
 const WINDOW_LIGHT_COLOR = 0x9cc4ff;
 const WINDOW_LIGHT_INTENSITY = 5000;   // au plus fort du saut
 const WINDOW_LIGHT_DISTANCE = 170;
+
+// Départ : les étoiles s'étirent devant les fenêtres, puis la vidéo du tunnel prend le relais
+const STRETCH_TIME = 0.9;       // secondes avant l'entrée dans le tunnel
+const STREAKS = 600;            // nombre de traînées d'étoiles
+const ARRIVAL_STREAK_TIME = 0.7;
+
+// Traînées d'étoiles : des lignes devant la passerelle (+Z) qui s'allongent vers la caméra.
+// Tout est calculé dans le shader : un seul appel de dessin. (Pas de bloom : son halo
+// ignore les murs et voilait tout l'intérieur du pont.)
+function createStarStreaks() {
+    const pos = new Float32Array(STREAKS * 2 * 3);
+    const end = new Float32Array(STREAKS * 2);
+    for (let i = 0; i < STREAKS; i++) {
+        const a = Math.random() * Math.PI * 2;
+        const r = 350 + Math.pow(Math.random(), 0.7) * 5000;     // pas d'étoile pile dans l'axe
+        const x = Math.cos(a) * r, y = Math.sin(a) * r * 0.7, z = 2500 + Math.random() * 9000;
+        for (let j = 0; j < 2; j++) {
+            pos.set([x, y, z], (i * 2 + j) * 3);
+            end[i * 2 + j] = j;                                   // 0 = tête, 1 = queue
+        }
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    geo.setAttribute('aEnd', new THREE.BufferAttribute(end, 1));
+    const mat = new THREE.ShaderMaterial({
+        uniforms: { uStretch: { value: 0 } },
+        vertexShader: /* glsl */`
+            attribute float aEnd;
+            uniform float uStretch;
+            varying float vEnd;
+            void main() {
+                vec3 p = position;
+                p.z -= uStretch * uStretch * 1800.0;          // les étoiles foncent vers nous
+                p.z -= aEnd * uStretch * 5200.0;              // la queue s'allonge vers la caméra
+                vEnd = aEnd;
+                gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
+            }`,
+        fragmentShader: /* glsl */`
+            uniform float uStretch;
+            varying float vEnd;
+            void main() {
+                float a = smoothstep(0.0, 0.25, uStretch) * (1.0 - vEnd * 0.85);   // tête vive, queue estompée
+                gl_FragColor = vec4(vec3(0.75, 0.88, 1.0) * 2.2, a);
+            }`,
+        transparent: true,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending
+    });
+    const lines = new THREE.LineSegments(geo, mat);
+    lines.frustumCulled = false;
+    lines.visible = false;
+    return lines;
+}
+
+// Flash blanc plein écran (sortie du tunnel)
+function createFlash() {
+    const el = document.createElement('div');
+    el.style.cssText = 'position:fixed;inset:0;background:radial-gradient(circle at 50% 45%, #fff 0%, #e8f2ff 45%, #9cc4ff 100%);' +
+        'opacity:0;pointer-events:none;z-index:99997;';
+    document.body.appendChild(el);
+    return (strength = 1, duration = 0.7) => {
+        el.style.transition = 'none';
+        el.style.opacity = String(strength);
+        requestAnimationFrame(() => requestAnimationFrame(() => {
+            el.style.transition = `opacity ${duration}s ease-out`;
+            el.style.opacity = '0';
+        }));
+    };
+}
 
 function setOpacityRecursive(object, opacity) {
     object.traverse((child) => {
@@ -126,18 +196,51 @@ export function initHyperspace(ctx) {
     const pivot = scene.getObjectByName("pivot");   // destroyers en orbite
     if (pivot) addFadingObject(pivot);
 
+    // traînées d'étoiles (départ) et flash blanc (sortie)
+    const streaks = createStarStreaks();
+    scene.add(streaks);
+    const flash = createFlash();
+    let stretchT = 0;          // départ : 0 → 1 pendant STRETCH_TIME
+    let arrivalT = 0;          // sortie : 1 → 0 (les traînées se résorbent)
+
+    function setStreaks(s) {
+        streaks.visible = s > 0;
+        streaks.material.uniforms.uStretch.value = s;
+    }
+
     // clic sur le bouton "Hyperspace"
     function start() {
         if (!isPlaying && video) {
             isPlaying = true;
-            fadeState = "fadeIn";
+            fadeState = "stretch";   // les étoiles s'étirent d'abord, puis le tunnel apparaît
+            stretchT = 0;
             fade.state = "fadeOut"; // 👈 on lance le fade objets
-            video.currentTime = 0;
-            video.play();
         }
     }
 
     function update(k) {
+        const dt = k / LEGACY_TICK_RATE;
+        const { state } = ctx;
+
+        // départ : étoiles qui s'étirent + tremblement qui monte
+        if (isPlaying && fadeState === "stretch") {
+            stretchT = Math.min(1, stretchT + dt / STRETCH_TIME);
+            setStreaks(stretchT);
+            state.cameraShake = Math.max(state.cameraShake, 0.15 + 0.7 * stretchT);
+            if (stretchT >= 1) {
+                fadeState = "fadeIn";
+                state.cameraShake = Math.max(state.cameraShake, 1.1);   // entrée dans le tunnel
+                video.currentTime = 0;
+                video.play();
+            }
+        }
+        // les traînées s'effacent quand le tunnel est affiché, et se résorbent à la sortie
+        if (fadeState === "fadeIn" || fadeState === "playing") setStreaks(screenMaterial ? 1 - screenMaterial.opacity : 0);
+        if (arrivalT > 0) {
+            arrivalT = Math.max(0, arrivalT - dt / ARRIVAL_STREAK_TIME);
+            setStreaks(arrivalT * arrivalT);
+        }
+
         // pendant l'hyperespace : fond bleu nuit au lieu des étoiles (rien ne dépasse de l'écran)
         if (screenMaterial) {
             const hyper = screenMaterial.opacity > 0.5;
@@ -162,6 +265,10 @@ export function initHyperspace(ctx) {
                 screenMaterial.opacity -= fadeSpeed * k;
                 if (screenMaterial.opacity <= 0) {
                     ctx.audio.sounds.boom.play();
+                    // sortie du tunnel : flash blanc, grosse secousse, traînées qui se résorbent
+                    flash(1, 0.8);
+                    state.cameraShake = Math.max(state.cameraShake, 1.4);
+                    arrivalT = 1;
                     screenMaterial.opacity = 0;
                     video.pause();
                     video.currentTime = 0;
