@@ -3367,7 +3367,17 @@ const PATROL = {
 const patrols = [];
 const prand = (a, b) => a + Math.random() * (b - a);
 
+// Les TIE des patrouilles sont instanciés (dessinés ensemble), avec leurs PROPRES
+// matériaux : on peut les estomper pendant l'hyperespace sans toucher aux TIE de la bataille.
+let patrolInstancer = null;
+let patrolFaded = false;
+
 function createPatrols() {
+    const model = tieModel.clone();
+    model.rotation.y = Math.PI;
+    model.traverse(o => { if (o.isMesh) o.material = o.material.clone(); });
+    patrolInstancer = new InstancedShips(scene, model, PATROL.GROUPS * PATROL.SLOTS.length);
+
     for (let g = 0; g < PATROL.GROUPS; g++) {
         const p = {
             angle: Math.random() * Math.PI * 2,
@@ -3380,12 +3390,7 @@ function createPatrols() {
         p.radiusTarget = p.radius; p.altTarget = p.alt; p.speedTarget = p.speed;
         PATROL.SLOTS.forEach(() => {
             const tie = new THREE.Group();
-            const model = tieModel.clone();
-            model.rotation.y = Math.PI;
-            // matériaux propres : on peut les estomper (hyperespace) sans toucher aux TIE de la bataille
-            model.traverse(o => { if (o.isMesh) o.material = o.material.clone(); });
-            tie.add(model);
-            scene.add(tie);
+            patrolInstancer.add(tie);
             p.members.push(tie);
         });
         patrols.push(p);
@@ -3442,12 +3447,18 @@ function updatePatrols(dt) {
             // hyperespace
             tie.visible = shown;
             tie.position.z += hyperOffset;
-            if (fading || tie.userData.faded) {
-                setOpacityRecursive(tie, fading ? objectOpacity : 1);
-                tie.userData.faded = fading;
-            }
         });
     });
+
+    // fondu pendant l'hyperespace (tous les TIE de patrouille partagent ces matériaux)
+    if (fading || patrolFaded) {
+        for (const part of patrolInstancer.parts) {
+            part.mesh.material.transparent = fading;
+            part.mesh.material.opacity = fading ? objectOpacity : 1;
+        }
+        patrolFaded = fading;
+    }
+    patrolInstancer.update();
 }
 
 function createTie() {

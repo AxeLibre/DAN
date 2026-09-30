@@ -48,7 +48,9 @@ const KEEP_NAMED = {
 // moins d'appels de dessin → la bataille est beaucoup plus fluide.
 // Seulement des modèles NON animés dont le code n'utilise pas les noms internes.
 const MERGE = new Set([
-    'xwing.glb', 'y-wing.glb', 'tieinterlow.glb', 'liberty.glb', 'frigate.glb',
+    // (pas tieinterlow.glb : la fusion rendait son cockpit noir — normales abîmées.
+    //  Inutile de toute façon : les TIE sont instanciés, tous dessinés ensemble.)
+    'xwing.glb', 'y-wing.glb', 'liberty.glb', 'frigate.glb',
     'CR90_lite.glb', 'transport.glb', 'star_destroyer2.glb',
     'capital_part1.glb', 'capital_part2.glb', 'capital_part3.glb'
 ]);
