@@ -1,8 +1,13 @@
 import * as THREE from 'three'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
+import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
+import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js';
-import { RGBELoader } from 'https://cdn.jsdelivr.net/npm/three@0.160/examples/jsm/loaders/RGBELoader.js';
-import { LaserBolts, ExplosionFX, CombatHUD, segmentSphere, LASER_GREEN, LASER_RED } from './weapons.js';
+import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js'; // même three.js que le reste (importmap en ligne, node_modules avec Vite)
+import { LaserBolts, ExplosionFX, CombatHUD, DebrisField, segmentSphere, LASER_GREEN, LASER_RED } from './weapons.js';
+import { RebelFleet } from './fleet.js';
 
 let scene, camera, renderer;
 let particleSystem, material;
@@ -57,6 +62,14 @@ let ctrlScreenFadeDirection = 0; // 1 = fade in, -1 = fade out
 const ctrlScreenFadeSpeed = 1.5;
 const screenGeometry = new THREE.PlaneGeometry(16, 9); // format 16:9
 const loadingManager = new THREE.LoadingManager();
+
+// Les modèles sont compressés (meshopt, voir tools/optimize-assets.mjs) :
+// chaque chargeur doit connaître le décodeur.
+function makeGLTFLoader() {
+    const loader = new GLTFLoader(loadingManager);
+    loader.setMeshoptDecoder(MeshoptDecoder);
+    return loader;
+}
 let panelMesh;
 
 let blinkTime = 0;
@@ -105,7 +118,8 @@ let explosions = [];                    // Explosions vidéo
 // Les vitesses "par image" réglées à l'époque sont conservées via ce facteur.
 const LEGACY_TICK_RATE = 120;
 const FLIGHT_CRUISE_SPEED = 50;   // vitesse du TIE en vol (unités/s)
-const FLIGHT_BOOST_SPEED = 170;   // avec MAJ (Shift) maintenue
+const FLIGHT_BOOST_SPEED = 700;   // avec MAJ (Shift) maintenue (l'Executor fait ~26 000 unités de long)
+const BATTLE_Y = 250;             // altitude moyenne de la bataille (au-dessus de la coque de l'Executor, y ≈ -80)
 const BATTLE_MIN_Z = 260;         // la bataille reste devant la passerelle (vitres ≈ z 150, canon z 190)
 const listener = new THREE.AudioListener();
 let collisionMeshInterior;
@@ -179,7 +193,8 @@ playButton.addEventListener("click", () => {
 scene = new THREE.Scene();
 scene.background = new THREE.Color(0x000000);
 
-camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 20000);
+// far = 50000 : l'Executor mesure ~26 000 unités, sa proue était coupée à 20 000
+camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 50000);
 camera.position.set(0,0,0);
 camera.rotation.order = "YXZ";
 
@@ -230,13 +245,19 @@ camera.add(listener2);
 const audioLoader = new THREE.AudioLoader();
 const audioLoader2 = new THREE.AudioLoader();
 
-ambientSound = new THREE.Audio(listener2);
-
-audioLoader2.load('public/ambient.mp3', function(buffer) {
-    ambientSound.setBuffer(buffer);
-    ambientSound.setLoop(true);   // ambiance en boucle
-    ambientSound.setVolume(0.5);  // volume doux
-});
+// Ambiance : 53 minutes de son. Avant, le fichier était entièrement téléchargé puis
+// décodé en mémoire (~1 Go de RAM !). Il est maintenant lu en streaming par le
+// navigateur. Même utilisation qu'avant : play(), stop(), isPlaying, buffer.
+const ambientEl = new Audio('public/ambient.mp3');
+ambientEl.loop = true;      // ambiance en boucle
+ambientEl.volume = 0.5;     // volume doux
+ambientEl.preload = 'none';
+ambientSound = {
+    buffer: true,
+    get isPlaying() { return !ambientEl.paused; },
+    play() { ambientEl.play().catch(() => {}); },
+    stop() { ambientEl.pause(); }
+};
 
 ambienttie = new THREE.Audio(listener2);
 
@@ -462,6 +483,7 @@ const cubeTexture = loader.load([
 ]);
 cubeTexture.colorSpace = THREE.SRGBColorSpace;
 scene.background = cubeTexture;
+const HYPERSPACE_BG = new THREE.Color(0x0b2a66);   // fond pendant l'hyperespace (bleu du tunnel)
 
 // ==================
 // LOAD GLB MODEL
@@ -484,7 +506,7 @@ pivot.name = "pivot";
 scene.add(pivot);
 let mixer;
 
-const loader2 = new GLTFLoader(loadingManager);
+const loader2 = makeGLTFLoader();
 
 loader2.load('public/projecteur4.glb', (gltf)=>{
     const projector = gltf.scene;
@@ -495,13 +517,13 @@ loader2.load('public/projecteur4.glb', (gltf)=>{
 });
 
 
-const loader3 = new GLTFLoader(loadingManager);
+const loader3 = makeGLTFLoader();
 
 loader3.load('public/star_destroyer2.glb', (gltf)=>{
 
     const star_destroyer = gltf.scene;
 
-    star_destroyer.position.set(0, 10, 900);
+    star_destroyer.position.set(0, 10, 1100);   // orbite 900 → 1100 : à 900 il frôlait/traversait le gros destroyer du décor
     star_destroyer.scale.set(30,30,30);
     star_destroyer.rotation.y = -Math.PI;
 
@@ -510,26 +532,202 @@ loader3.load('public/star_destroyer2.glb', (gltf)=>{
 
 
 const star_destroyer2 = star_destroyer.clone();
-star_destroyer2.position.set(0, 20, -900);
+star_destroyer2.position.set(0, 20, -1100);
 star_destroyer2.scale.set(30,30,30);
 star_destroyer2.rotation.y = Math.PI;
 pivot.add(star_destroyer2);
 
 });
 
-const loader4= new GLTFLoader(loadingManager);
-let star_destroyer0;
+// ===================================================================
+// SUPER STAR DESTROYER (Executor) — le vaisseau du joueur, vu de dehors
+// ===================================================================
+// Remplace les 2 anciens décors (star_destroyer0 vu depuis la passerelle +
+// star_destroyer_tower2 vu en vol). Le modèle a été aligné dans Blender sur la
+// passerelle : il prend donc EXACTEMENT la même transformation que projecteur4.
+// - All_Tower : la tourelle qui contient la passerelle → cachée quand on est dedans
+// - MainHull  : coque simplifiée (≈700 triangles) → sert aux collisions en vol
+const loader4 = makeGLTFLoader();
+let executor = null;
+let executorTower = null;
+const towerExtras = [];
+const exteriorColliders = [];
 
-loader4.load('public/star_destroyer0.glb', (gltf)=>{
+loader4.load('public/star_executor_web.glb', (gltf) => {
+    executor = gltf.scene;
+    executor.position.set(0, -12, 98.5);
+    executor.scale.set(10, 10, 10);
+    executor.rotation.y = Math.PI;
+    scene.add(executor);
 
-    star_destroyer0 = gltf.scene;
-    star_destroyer0.position.set(0, -65, 300);
-    star_destroyer0.scale.set(50,40,50);
-    star_destroyer0.rotation.y = -Math.PI/2; // faire face à la caméra
-    worldGroup.add(star_destroyer0);
+    executor.traverse(o => {
+        if (o.name === 'All_Tower' && !executorTower) executorTower = o;
+        // panneaux lumineux collés devant les fenêtres du pont (hors du groupe All_Tower) :
+        // ils se cachent / s'affichent avec la tourelle
+        if (o.name === 'TowerGreebles1') towerExtras.push(o);
+        if (o.isMesh && /^MainHull/.test(o.name)) exteriorColliders.push(o);
+    });
+    towerExtras.forEach(o => { o.visible = false; });
+    if (executorTower) {
+        executor.updateMatrixWorld(true);
+        hangarCut.toLocal.value.copy(executor.matrixWorld).invert();
+        executorTower.traverse(o => {
+            if (!o.isMesh) return;
+            exteriorColliders.push(o);
+            hangarCut.towerMeshes.add(o);
+            // on ne creuse que la coque : les lumières de l'entrée du hangar restent visibles
+            if (/ScratchedMetal/.test(o.material.name)) carveHangarExit(o);
+        });
+        executorTower.visible = false;
+    }
 });
 
-const loader5 = new GLTFLoader(loadingManager);
+// -------------------------------------------------------------------
+// Sortie du hangar à travers l'arrière de la tourelle
+// -------------------------------------------------------------------
+// La tourelle se prolonge ~80 unités derrière la bouche du hangar : on y creuse
+// un tunnel (dans le shader) et les collisions ignorent cette zone.
+// Boîte exprimée dans le repère de l'Executor (= repère de la passerelle) :
+// bouche du hangar : x ±2.67, y -0.03 → 2.32, fin à z = 19.08
+const hangarCut = {
+    min: new THREE.Vector3(-2.9, -0.3, 18.6),   // à peine plus grand que la bouche du hangar
+    max: new THREE.Vector3(2.9, 2.6, 40),
+    toLocal: { value: new THREE.Matrix4() },   // monde → repère de l'Executor
+    towerMeshes: new Set()
+};
+
+function carveHangarExit(mesh) {
+    const mat = mesh.material.clone();
+    mat.side = THREE.DoubleSide;
+    mat.onBeforeCompile = (shader) => {
+        shader.uniforms.uToLocal = hangarCut.toLocal;
+        shader.uniforms.uCutMin = { value: hangarCut.min };
+        shader.uniforms.uCutMax = { value: hangarCut.max };
+        shader.vertexShader = shader.vertexShader
+            .replace('#include <common>', '#include <common>\nuniform mat4 uToLocal;\nvarying vec3 vCutPos;')
+            .replace('#include <begin_vertex>', '#include <begin_vertex>\nvCutPos = (uToLocal * modelMatrix * vec4(transformed, 1.0)).xyz;');
+        shader.fragmentShader = shader.fragmentShader
+            .replace('#include <common>', '#include <common>\nuniform vec3 uCutMin;\nuniform vec3 uCutMax;\nvarying vec3 vCutPos;')
+            .replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>
+                if (all(greaterThan(vCutPos, uCutMin)) && all(lessThan(vCutPos, uCutMax))) discard;`)
+            .replace('#include <dithering_fragment>', `#include <dithering_fragment>
+                if (!gl_FrontFacing) gl_FragColor.rgb *= 0.25;   // intérieur de la tourelle, dans l'ombre`);
+    };
+    mat.customProgramCacheKey = () => 'hangar-cut';
+    mesh.material = mat;
+}
+
+// un impact dans le tunnel de sortie ne compte pas comme une collision
+function inHangarCut(hit) {
+    if (!hangarCut.towerMeshes.has(hit.object)) return false;
+    const p = hit.point.clone().applyMatrix4(hangarCut.toLocal.value);
+    return p.x > hangarCut.min.x - 0.3 && p.x < hangarCut.max.x + 0.3 &&
+           p.y > hangarCut.min.y - 0.3 && p.y < hangarCut.max.y + 0.3 &&
+           p.z > hangarCut.min.z - 0.3;
+}
+
+// Tourelle visible seulement quand la caméra est vraiment dehors
+// (en sortant du hangar, on traverse encore la tourelle sur ~80 unités)
+const _camPos = new THREE.Vector3();
+// Le tunnel À L'INTÉRIEUR de la tourelle (repère de l'Executor : la tourelle finit à z = 26.9)
+const towerTunnel = new THREE.Box3(new THREE.Vector3(-2.9, -0.3, 16), new THREE.Vector3(2.9, 2.6, 27.2));
+const _camLocal = new THREE.Vector3();
+
+function updateExecutorTower() {
+    if (!executorTower) return;
+    camera.getWorldPosition(_camPos);
+    _camLocal.copy(_camPos).applyMatrix4(hangarCut.toLocal.value);
+    // même déclencheur que le cockpit (isInsideShip) ; en plus, cachée pendant
+    // la courte traversée du tunnel à l'intérieur de la tourelle
+    const show = !isInsideShip && !towerTunnel.containsPoint(_camLocal);
+    executorTower.visible = show;
+    for (const o of towerExtras) o.visible = show;
+}
+
+// ===================================================================
+// BALISE D'ATTERRISSAGE + PILOTE AUTOMATIQUE (entrée / sortie du hangar)
+// ===================================================================
+// 3 cadres holographiques devant le hangar. En entrant dans la zone en volant
+// vers le vaisseau, le pilote automatique fait entrer le TIE dans le hangar.
+// À la sortie du hangar, il fait traverser le tunnel de la tourelle.
+const HANGAR_OUTSIDE = new THREE.Vector3(0, 3.5, -250);   // point de sortie, derrière la tourelle (z ≈ -170)
+const HANGAR_INSIDE  = new THREE.Vector3(0, 3.5, -62);    // dans le hangar, juste passé le détecteur
+const LANDING_ZONE   = new THREE.Box3(new THREE.Vector3(-70, -35, -345), new THREE.Vector3(70, 45, -185));
+
+const landingBeacon = new THREE.Group();
+{
+    const shape = new THREE.Shape();
+    shape.moveTo(-32, -18); shape.lineTo(32, -18); shape.lineTo(32, 18); shape.lineTo(-32, 18); shape.lineTo(-32, -18);
+    const hole = new THREE.Path();
+    hole.moveTo(-29, -15); hole.lineTo(-29, 15); hole.lineTo(29, 15); hole.lineTo(29, -15); hole.lineTo(-29, -15);
+    shape.holes.push(hole);
+    const frameGeo = new THREE.ShapeGeometry(shape);
+    const fillGeo = new THREE.PlaneGeometry(58, 30);
+    [-200, -260, -320].forEach((z, i) => {
+        const mat = new THREE.MeshBasicMaterial({ color: 0x66ccff, transparent: true, opacity: 0.6, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+        const fill = new THREE.MeshBasicMaterial({ color: 0x3388ff, transparent: true, opacity: 0.05, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+        const frame = new THREE.Mesh(frameGeo, mat);
+        frame.add(new THREE.Mesh(fillGeo, fill));
+        frame.position.set(0, 3.5, z);
+        frame.userData.index = i;
+        landingBeacon.add(frame);
+    });
+    landingBeacon.visible = false;
+    scene.add(landingBeacon);
+}
+
+const autopilot = { active: false, t: 0, duration: 2, curve: null, yawFrom: 0, yawTo: 0 };
+
+function startAutopilot(points, yawTo, duration) {
+    autopilot.active = true;
+    autopilot.t = 0;
+    autopilot.duration = duration;
+    autopilot.curve = new THREE.CatmullRomCurve3(points);
+    autopilot.yawFrom = player.rotation.y;
+    // chemin angulaire le plus court
+    let d = (yawTo - autopilot.yawFrom) % (Math.PI * 2);
+    if (d > Math.PI) d -= Math.PI * 2;
+    if (d < -Math.PI) d += Math.PI * 2;
+    autopilot.yawTo = autopilot.yawFrom + d;
+    fireHeldSpace = false;
+    fireHeldMouse = false;
+}
+
+function updateAutopilot(dt) {
+    autopilot.t = Math.min(1, autopilot.t + dt / autopilot.duration);
+    const e = autopilot.t * autopilot.t * (3 - 2 * autopilot.t);          // départ et arrivée en douceur
+    player.position.copy(autopilot.curve.getPoint(e));
+    player.rotation.y = autopilot.yawFrom + (autopilot.yawTo - autopilot.yawFrom) * Math.min(1, e * 1.6);
+    // remise à plat du TIE
+    const k = 1 - Math.exp(-5 * dt);
+    flightPitch += (0 - flightPitch) * k;
+    flightRoll += (0 - flightRoll) * k;
+    rotationVelocity = 0;
+    camera.rotation.x = flightPitch;
+    camera.rotation.z = flightRoll;
+    if (autopilot.t >= 1) autopilot.active = false;
+}
+
+function updateLanding(dt) {
+    // balise visible seulement en vol, lumières qui défilent vers le hangar
+    landingBeacon.visible = !isInsideShip;
+    if (landingBeacon.visible) {
+        const t = performance.now() * 0.001;
+        landingBeacon.children.forEach(f => {
+            const phase = (t * 1.5 - (2 - f.userData.index) * 0.33) % 1;
+            f.material.opacity = 0.25 + 0.75 * Math.pow(Math.max(0, Math.cos(phase * Math.PI * 2)), 4);
+        });
+    }
+    if (autopilot.active || isInsideShip) return;
+
+    // dans la zone ET en direction du vaisseau → atterrissage automatique
+    const fwd = camera.getWorldDirection(new THREE.Vector3());
+    if (LANDING_ZONE.containsPoint(player.position) && fwd.z > 0.3) {
+        startAutopilot([player.position.clone(), new THREE.Vector3(0, 3.5, -200), HANGAR_INSIDE.clone()], Math.PI, 2.6);
+    }
+}
+
+const loader5 = makeGLTFLoader();
 const mixers = []; // tableau global pour stocker les mixers des deathtroopers
 
 
@@ -576,7 +774,7 @@ loader5.load('public/stormtrooper2.glb', (gltf) => {
 
 });
 
-const loader6 = new GLTFLoader(loadingManager);
+const loader6 = makeGLTFLoader();
 
 loader6.load('public/k2so.glb', (gltf) => {
     // Premier
@@ -605,7 +803,7 @@ loader6.load('public/k2so.glb', (gltf) => {
     mixers.push(mixer1, mixer2)
 });
 
-const loader7 = new GLTFLoader (loadingManager);
+const loader7 = makeGLTFLoader();
 
 loader7.load('public/officer.glb', (gltf) => {
     // Premier
@@ -746,7 +944,7 @@ scene.add(ctrlPlane);
 
 let hyperbouton;
 
-const loader8 = new GLTFLoader (loadingManager);
+const loader8 = makeGLTFLoader();
 
 loader8.load('public/hyperbouton.glb', (gltf)=>{
     hyperbouton = gltf.scene;
@@ -764,12 +962,17 @@ loader8.load('public/hyperbouton.glb', (gltf)=>{
 
 
 
-const loader9 = new GLTFLoader (loadingManager);
+const loader9 = makeGLTFLoader();
 
 loader9.load('public/hyperscreen.glb', (gltf) => {
     hyperscreen = gltf.scene;
-    hyperscreen.position.set(0,-300,100);
-    hyperscreen.scale.set(50,150,70);
+    // Écran agrandi ×21 (mêmes proportions qu'avant : 50 × 150 × 70) pour englober TOUT l'Executor :
+    // l'avant du vaisseau reste visible depuis le pont, devant le tunnel d'hyperespace.
+    // Hauteur et largeur augmentées pour que le bord (ouvert) de l'écran reste hors du champ de vision.
+    // Boîte obtenue : x ±29 800, y -23 200 → 23 200 (centrée sur les yeux), z -19 300 → 21 200
+    // (proue de l'Executor à z ≈ 20 000 ; coin le plus lointain ≈ 43 000 < far 50 000).
+    hyperscreen.position.set(0, -11664, 2500);
+    hyperscreen.scale.set(1700, 5437, 1470);
     hyperscreen.rotation.y = Math.PI;
 
     hyperscreen.traverse(obj => {
@@ -778,6 +981,7 @@ loader9.load('public/hyperscreen.glb', (gltf) => {
                 map: videoTexture,
                 transparent: true,
                 opacity: 0,
+                depthWrite: false,   // invisible la plupart du temps : ne doit rien masquer derrière lui
                 side: THREE.DoubleSide
             });
             obj.material = screenMaterial;
@@ -790,7 +994,7 @@ loader9.load('public/hyperscreen.glb', (gltf) => {
 
 
 
-const loader10 = new GLTFLoader (loadingManager);
+const loader10 = makeGLTFLoader();
 let doorleft, doorright;
 let doorState = 0; // 0 = fermé, 1 = ouvert
 
@@ -802,7 +1006,7 @@ loader10.load('public/doorleft.glb', (gltf)=>{
     worldGroup.add(doorleft);
 });
 
-const loader11 = new GLTFLoader (loadingManager);
+const loader11 = makeGLTFLoader();
 
 loader11.load('public/doorright.glb', (gltf)=>{
     doorright = gltf.scene; //
@@ -813,7 +1017,7 @@ loader11.load('public/doorright.glb', (gltf)=>{
 });
 
 let detectionMesh;
-const gltfLoader = new GLTFLoader(loadingManager);
+const gltfLoader = makeGLTFLoader();
 
 gltfLoader.load('public/shipDetection.glb', (gltf) => {
     detectionMesh = gltf.scene;
@@ -880,14 +1084,7 @@ gltfLoader.load('public/cage.glb', (gltf) => {
         }
     });
 
-gltfLoader.load('public/star_destroyer_tower2.glb', (gltf) => {
-    sdt = gltf.scene;
-    sdt.visible = false;
-    scene.add(sdt);
-    sdt.position.set(0,-12, 98.5);
-    sdt.scale.set(10,10,10);
-    sdt.rotation.y = Math.PI; 
-});
+// (l'ancienne tour extérieure star_destroyer_tower2.glb est remplacée par l'Executor)
 
 gltfLoader.load('public/tieplayer.glb', (gltf) => {
     tiePlayer1 = gltf.scene;
@@ -965,10 +1162,69 @@ gltfLoader.load('public/screenhangar.glb', (gltf) => {
     screenhangar = gltf.scene;
     screenhangar.position.set(-22, -12, -73);
     screenhangar.scale.set(6,6,6);
-    screenhangar.rotation.y = Math.PI/2; 
+    screenhangar.rotation.y = Math.PI/2;
     scene.add(screenhangar);
     checkGameReady();
+
+    // matériaux propres à la console (pour les faire clignoter)
+    screenhangar.traverse(o => {
+        if (!o.isMesh || !o.material.emissive) return;
+        o.material = o.material.clone();
+        const n = o.material.name;
+        hangarConsole.mats.push({
+            mat: o.material,
+            kind: /Red/.test(n) ? 'red' : /Blue/.test(n) ? 'blue' : 'screen',
+            base: o.material.emissiveIntensity
+        });
+    });
+    // petite lumière qui éclaire le sol autour de la console
+    hangarConsole.light = new THREE.PointLight(0x66aaff, 0, 45, 2);
+    hangarConsole.light.position.set(-17, -2, -73);
+    scene.add(hangarConsole.light);
+    // (pas de bloom sur la console : l'écran devenait illisible)
 });
+
+// ===================================================================
+// CONSOLE DE CHOIX DU TIE : clignote, réagit au survol et au clic
+// ===================================================================
+const hangarConsole = { mats: [], light: null, hover: false, flash: 0, press: 0, t: 0 };
+const consoleRay = new THREE.Raycaster();
+
+function updateHangarConsole(dt) {
+    if (!screenhangar) return;
+    const hc = hangarConsole;
+    hc.t += dt;
+
+    // survol (seulement à pied, à proximité)
+    const near = isInsideShip && player.position.distanceTo(screenhangar.position) < 90;
+    let hover = false;
+    if (near) {
+        consoleRay.setFromCamera(mouse, camera);
+        hover = consoleRay.intersectObject(screenhangar, true).length > 0;
+    }
+    if (hover !== hc.hover) {
+        hc.hover = hover;
+        if (!hud.mode) renderer.domElement.style.cursor = hover ? 'pointer' : '';
+    }
+
+    hc.flash = Math.max(0, hc.flash - dt * 2.5);
+    hc.press = Math.max(0, hc.press - dt * 5);
+
+    // pulsation "regarde-moi !" + boost au survol + flash au clic
+    const pulse = 0.5 + 0.5 * Math.sin(hc.t * 4);
+    const blink = Math.sin(hc.t * 6) > 0;
+    const boost = (hover ? 1.8 : 1) + hc.flash * 4;
+    for (const m of hc.mats) {
+        if (m.kind === 'screen') m.mat.emissiveIntensity = m.base * (0.55 + 0.75 * pulse) * boost;
+        else if (m.kind === 'red') m.mat.emissiveIntensity = m.base * (blink ? 3 : 0.2) * boost;
+        else m.mat.emissiveIntensity = m.base * (blink ? 0.2 : 3) * boost;
+    }
+    if (hc.light) hc.light.intensity = (150 + 250 * pulse) * boost;
+
+    // léger grossissement au survol, "bouton pressé" au clic
+    const s = 6 * (hover ? 1.04 : 1) * (1 - 0.05 * Math.sin(hc.press * Math.PI));
+    screenhangar.scale.setScalar(s);
+}
 
 let hangaracc1;
 
@@ -1025,7 +1281,7 @@ function checkGameReady() {
     }
 }
 
-const loader12 = new GLTFLoader (loadingManager);
+const loader12 = makeGLTFLoader();
 
 loader12.load('public/tie_fighter0.glb', (gltf) => {
     // Premier
@@ -1050,7 +1306,7 @@ loader12.load('public/tie_fighter0.glb', (gltf) => {
 
 });
 
-const loader13 = new GLTFLoader (loadingManager);
+const loader13 = makeGLTFLoader();
 
 loader13.load('public/droid1.glb', (gltf) => {
     // Premier
@@ -1059,6 +1315,8 @@ loader13.load('public/droid1.glb', (gltf) => {
     droid1.scale.set(10,10,10);
     droid1.rotation.y = -Math.PI;
     worldGroup.add(droid1);
+    // le droïde R5 se déplace (animation de son nœud racine) : on suit un de ses morceaux
+    droidBody = droid1.getObjectByName('Object_8');
     console.log(gltf.animations);
 
 
@@ -1564,89 +1822,37 @@ function checkZones() {
 let lastCollisionTime = 0; // anti-spam
 const COLLISION_COOLDOWN = 0.3; // secondes entre deux impacts
 
-function createCollisionSparks(position, normal) {
-    const count = 20;
-    const geometry = new THREE.BufferGeometry();
+function createCollisionSparks(position, normal, moveDir = null) {
+    // direction de glissement : le mouvement du TIE projeté sur la coque
+    const slide = moveDir ? moveDir.clone().projectOnPlane(normal) : null;
+    if (slide && slide.lengthSq() > 1e-6) slide.normalize();
 
-    const positions = new Float32Array(count * 3);
-    const velocities = [];
-    const seeds = new Float32Array(count);
+    // flash + petit impact
+    fx.flash(position, 3.5, new THREE.Color(1, 0.85, 0.6), 0.15);
+    fx.impact(position, new THREE.Color(1, 0.6, 0.2), 2.2);
 
-    for (let i = 0; i < count; i++) {
-        positions[i*3]   = position.x;
-        positions[i*3+1] = position.y;
-        positions[i*3+2] = position.z;
-
-        // Étincelles qui rebondissent le long de la surface (pas en sphère)
-        // On projette dans le plan de la normale
-        const tangent = new THREE.Vector3(
-            Math.random() - 0.5,
-            Math.random() - 0.5,
-            Math.random() - 0.5
-        ).projectOnPlane(normal).normalize();
-
-        const speed = 2.0 + Math.random() * 5.0;
-        const bounce = 0.5 + Math.random() * 1.5; // ← était 5-15
-
-        velocities.push(new THREE.Vector3(
-            tangent.x * speed + normal.x * bounce,
-            tangent.y * speed + normal.y * bounce,
-            tangent.z * speed + normal.z * bounce
-        ));
-
-        seeds[i] = Math.random();
+    // gerbe d'étincelles en traînées
+    for (let i = 0; i < 34; i++) {
+        const t = new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).projectOnPlane(normal);
+        if (t.lengthSq() < 1e-6) continue;
+        t.normalize();
+        if (slide && slide.lengthSq() > 0.5) t.lerp(slide, 0.65).normalize();
+        const dir = t.addScaledVector(normal, 0.1 + Math.random() * 0.45).normalize();
+        const hot = Math.random();
+        bolts.fire({
+            from: position, dir,
+            speed: 50 + Math.random() * 170,
+            length: 1.5 + Math.random() * 4.5,
+            width: 0.12 + Math.random() * 0.16,
+            color: new THREE.Color(1, 0.45 + hot * 0.45, 0.12 + hot * 0.3),
+            range: 10 + Math.random() * 45,
+            team: 'spark'
+        });
     }
 
-    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    geometry.setAttribute('seed',     new THREE.BufferAttribute(seeds, 1));
-
-    const material = new THREE.ShaderMaterial({
-        transparent: true,
-        depthWrite: false,
-        blending: THREE.AdditiveBlending,
-        uniforms: {
-            uOpacity:    { value: 1.0 },
-            uBrightness: { value: 15.0 },
-            time:        { value: 0.0 }
-        },
-        vertexShader: `
-            precision mediump float;
-            attribute float seed;
-            uniform float time;
-            uniform float uOpacity;
-            void main(){
-                vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-                gl_Position = projectionMatrix * mvPosition;
-                float flicker = 0.5 + 0.5 * sin(time * 20.0 + seed * 6.28);
-                gl_PointSize = clamp(15.0 * flicker, 3.0, 20.0);
-            }
-        `,
-        fragmentShader: `
-            precision mediump float;
-            uniform float uOpacity;
-            uniform float uBrightness;
-            void main(){
-                vec2 uv = gl_PointCoord - 0.5;
-                float d = length(uv);
-                float core = exp(-d * d * 8.0);
-                // Couleur : blanc chaud → orange → rouge
-                vec3 color = mix(vec3(1.0, 0.5, 0.1), vec3(1.0, 1.0, 0.8), core);
-                gl_FragColor = vec4(color * uBrightness, core * uOpacity);
-            }
-        `
-    });
-
-    const system = new THREE.Points(geometry, material);
-    system.userData = {
-        life:    1.5,
-        maxLife: 1.5,
-        velocities,
-        count,
-        type: 'collision_sparks'
-    };
-
-    scene.add(system);
-    explosionParticleSystems.push(system); // réutilise le système existant !
+    // lueur de métal chauffé au point de contact + quelques éclats brûlants
+    fx.emit(position, new THREE.Vector3(), 0.9, 2.5, 4.5, new THREE.Color(1, 0.5, 0.15), 0, 1);
+    debris.spawn(position, 4, { dir: normal, speed: [8, 30], size: [0.25, 0.8], life: [1.2, 2.5], hot: 1 });
 }
 
 
@@ -1694,6 +1900,7 @@ const screenOffMaterial4 = new THREE.MeshStandardMaterial({
 
 const video2 = document.createElement("video");
 video2.src = "public/screen1.mp4";
+video2.preload = "none";   // téléchargée seulement au 1er clic sur l'écran
 video2.loop = false;
 video2.muted = false; // important pour autoplay navigateur
 video2.playsInline = true;
@@ -1721,6 +1928,7 @@ scene.add(screen);
 // 1️⃣ élément vidéo HTML
 const video3 = document.createElement("video");
 video3.src = "public/screen2.mp4";
+video3.preload = "none";   // téléchargée seulement au 1er clic sur l'écran
 video3.loop = false;
 video3.muted = false;
 video3.playsInline = true;
@@ -1750,6 +1958,7 @@ scene.add(screen2);
 // 1️⃣ élément vidéo HTML
 const video4 = document.createElement("video");
 video4.src = "public/screen3.mp4";
+video4.preload = "none";   // téléchargée seulement au 1er clic sur l'écran
 video4.loop = false;
 video4.muted = false;
 video4.playsInline = true;
@@ -1777,6 +1986,7 @@ scene.add(screen3);
 // 1️⃣ élément vidéo HTML
 const video5 = document.createElement("video");
 video5.src = "public/screen4.mp4";
+video5.preload = "none";   // téléchargée seulement au 1er clic sur l'écran
 video5.loop = false;
 video5.muted = false;
 video5.playsInline = true;
@@ -1869,7 +2079,7 @@ const clickableObjects = [screen,screen2,screen3,screen4];
 // ==========================================================
 /*
 // 🔥 LASER GLB
-const laserLoader = new GLTFLoader(loadingManager);
+const laserLoader = makeGLTFLoader();
 
 let laserMixer;
 let laserAction;
@@ -1917,7 +2127,7 @@ function playVoice(voices) {
 }
 
 // 🔊 LASER SOUND (canon de la passerelle)
-const laserVoices = makeVoices('public/laser.mp3', 0.3);
+// (le son du canon est maintenant spatialisé : voir sfx.laser plus bas)
 
 // La bataille (X-Wing + TIE alliés) est visible avec le canon OU en vol
 function battleOn() {
@@ -2001,7 +2211,7 @@ function findLockTarget(origin, dir, maxAngleDeg, maxDist) {
     let bestAngle = THREE.MathUtils.degToRad(maxAngleDeg);
     const v = new THREE.Vector3();
     for (const e of enemies) {
-        if (!e || !e.visible || e.userData.dead) continue;
+        if (!e || !e.visible || e.userData.dead || !xwingActive(e)) continue;
         v.subVectors(e.position, origin);
         const d = v.length();
         if (d > maxDist || d < 1) continue;
@@ -2082,13 +2292,13 @@ function updateTurret(dt) {
         bolts.fire({
             from: muzzle, dir,
             speed: TURRET.BOLT_SPEED, length: 26, width: 1.6,
-            color: TURRET.COLOR, range: 1800, team: 'player',
+            color: TURRET.COLOR, range: 3200, team: 'player',
             hitTest: playerBoltHitTest, onHit: onPlayerBoltHit
         });
         fx.muzzle(muzzle, TURRET.COLOR, 6);
         turret.light.intensity = 900;
         turret.recoilT = 0;
-        playVoice(laserVoices);
+        playAt(sfx.laser, muzzle, 1.4, 0);
     }
 }
 
@@ -2099,64 +2309,28 @@ function hitShipList(list, p0, p1, radius) {
     let best = null, bestT = 2;
     for (const s of list) {
         if (!s || !s.visible || s.userData.dead) continue;
+        const ph = s.userData.phase;
+        if (ph !== undefined && ph !== 'battle' && ph !== 'formation' && ph !== 'launch') continue;
         const t = segmentSphere(p0, p1, s.position, radius);
         if (t >= 0 && t < bestT) { bestT = t; best = s; }
     }
     return best ? { target: best, t: bestT, point: new THREE.Vector3().lerpVectors(p0, p1, bestT) } : null;
 }
 
-// Les grands vaisseaux sont testés avec une ellipsoïde calée sur chaque partie
-const _inv = new THREE.Matrix4();
-const _a = new THREE.Vector3();
-const _b = new THREE.Vector3();
-const _zero = new THREE.Vector3();
-function capitalPartEllipsoid(part) {
-    if (part.userData.ellipsoid) return part.userData.ellipsoid;
-    part.updateMatrixWorld(true);
-    _inv.copy(part.matrixWorld).invert();
-    const box = new THREE.Box3();
-    part.traverse(m => {
-        if (!m.isMesh) return;
-        if (!m.geometry.boundingBox) m.geometry.computeBoundingBox();
-        box.union(m.geometry.boundingBox.clone().applyMatrix4(m.matrixWorld).applyMatrix4(_inv));
-    });
-    const e = { center: box.getCenter(new THREE.Vector3()), radii: box.getSize(new THREE.Vector3()).multiplyScalar(0.5 * 0.92) };
-    part.userData.ellipsoid = e;
-    return e;
-}
-
-function hitCapital(p0, p1) {
-    let best = null;
-    for (const ship of capitalShips) {
-        for (const part of ship.parts) {
-            if (part.userData.destroyed || !part.visible) continue;
-            const e = capitalPartEllipsoid(part);
-            _inv.copy(part.matrixWorld).invert();
-            _a.copy(p0).applyMatrix4(_inv).sub(e.center).divide(e.radii);
-            _b.copy(p1).applyMatrix4(_inv).sub(e.center).divide(e.radii);
-            const t = segmentSphere(_a, _b, _zero, 1);
-            if (t >= 0 && (!best || t < best.t)) {
-                best = { ship, part, t, point: new THREE.Vector3().lerpVectors(p0, p1, t) };
-            }
-        }
-    }
-    return best;
-}
-
 function playerBoltHitTest(bolt, p0, p1) {
     const x = hitShipList(enemies, p0, p1, 18);
-    const c = hitCapital(p0, p1);
+    const c = rebelFleet.hitTest(p0, p1, bolt);
     if (x && (!c || x.t <= c.t)) return { kind: 'xwing', ...x };
     if (c) return { kind: 'capital', ...c };
     return null;
 }
 
 function onPlayerBoltHit(bolt, hit) {
-    fx.impact(hit.point, bolt.color, hit.kind === 'capital' ? 7 : 4);
+    fx.impact(hit.point, bolt.color, hit.kind === 'capital' ? 10 : 4);
     if (hit.kind === 'xwing') {
         destroyEnemy(hit.target, true);
     } else if (hit.kind === 'capital') {
-        hitCapitalShipPart(hit.ship, hit.part, hit.point);
+        rebelFleet.hit(hit.ship, hit.part, hit.point, bolt.dir);
     }
 }
 
@@ -2176,7 +2350,7 @@ audioLoader.load('public/alarm.mp3', (buffer) => {
 
 // Chargement du panneau GLB
 
-const panelLoader = new GLTFLoader(loadingManager);
+const panelLoader = makeGLTFLoader();
 
 panelLoader.load('public/alarm.glb', (gltf) => {
 
@@ -2287,8 +2461,9 @@ function updateTieGuns(dt) {
 
     bolts.fire({
         from, dir: aim.sub(from),
-        speed: TIE_GUN.BOLT_SPEED, length: 90, width: 2.6,   // vus de dos : longs et épais
-        color: TIE_GUN.COLOR, range: 1800, team: 'player',
+        speed: TIE_GUN.BOLT_SPEED + currentFlightSpeed,     // + vitesse du TIE : le boost ne rattrape pas ses propres tirs
+        length: 90, width: 2.6,                              // vus de dos : longs et épais
+        color: TIE_GUN.COLOR, range: 2600, team: 'player',
         hitTest: playerBoltHitTest, onHit: onPlayerBoltHit
     });
     fx.muzzle(from, TIE_GUN.COLOR, 1.6);
@@ -2297,25 +2472,32 @@ function updateTieGuns(dt) {
 }
 
 // ===================================================================
-// VAISSEAUX ENNEMIS - VERSION AMÉLIORÉE
+// X-WING — ESCADRILLES QUI ARRIVENT AVEC LES CROISEURS REBELLES
 // ===================================================================
+// Cycle de vie d'un X-Wing (userData.phase) :
+//   'pool'      : en réserve, invisible
+//   'jump'      : sortie d'hyperespace à côté d'un croiseur (étirement + flash)
+//   'formation' : vole quelques secondes en formation avec l'escadrille
+//   'battle'    : se disperse et combat (ancien comportement "en boucles")
+//   'leave'     : arrivé près du destroyer impérial, repart en hyperespace
+// Les X-Wing détruits ou partis retournent dans la réserve et reviennent
+// plus tard en renfort, toujours par escadrilles.
 
-// X-WING
-
-const mothershipPosition = new THREE.Vector3(0,0,0);
-const safeRadius = 200;
-
-// Paramètres de mouvement améliorés
-const MOVEMENT = {
-    BASE_SPEED: 30,
-    WANDER_STRENGTH: 0.5,
-    FORMATION_STRENGTH: 0.3,
-    AVOIDANCE_RADIUS: 40,
-    TURN_SPEED: 2.0,
-    WAVE_FREQUENCY: 0.8,
-    MAX_SPEED: 100,
-    MIN_SPEED: 30
+const XWING = {
+    POOL: 40,                 // nombre total d'X-Wing
+    SQUAD: [5, 7],            // taille d'une escadrille
+    JUMP_TIME: 0.9,
+    JUMP_DISTANCE: 1800,
+    FORMATION_TIME: 3.0,
+    FORMATION_SPEED: 75,
+    REINFORCE_EVERY: 6,       // secondes entre deux escadrilles de renfort
+    MAX_ACTIVE: 34,
+    LEAVE_Z: BATTLE_MIN_Z + 200   // en dessous : ils repartent en hyperespace
 };
+
+let xwingReinforceTimer = 0;
+let battleWasOn = false;
+const _fwdX = new THREE.Vector3(0, 0, -1);   // avant d'un X-Wing dans son repère
 
 gltfLoader.load('public/xwing.glb', (gltf) => {
     xwingModel = gltf.scene;
@@ -2324,211 +2506,240 @@ gltfLoader.load('public/xwing.glb', (gltf) => {
     xwingModel.position.set(0,0,0);
     xwingModel.rotation.y += Math.PI;
 
-    // Créer les X-Wing mais les cacher
-    for(let i=0; i<10; i++){
-        spawnSquadron(5);
-    }
-    
-    // Les cacher immédiatement après création
-    enemies.forEach(enemy => {
-        enemy.visible = false;
-    });
-
-
-    // FORCER UNE PREMIÈRE MISE À JOUR POUR LANCER L'ANIMATION
-    if (enemies.length > 0) {
-        // Simuler 5 secondes d'animation d'un coup
-        for(let i = 0; i < 50; i++) {
-            updateEnemies(0.1); // 50 * 0.1 = 5 secondes
-        }
-        console.log("Animation avancée de 5 secondes");
-    }
+    for (let i = 0; i < XWING.POOL; i++) createXwing(xwingModel, 'xwing');
 });
 
-const boxSize = 400;
+// Y-WING : même comportement que les X-Wing (escadrilles, formation, dispersion)
+// Le modèle d'origine est décentré, orienté nez vers +X et très grand :
+// on le recentre, on le tourne nez vers -Z (comme les X-Wing) et on le met à ~38 unités.
+const YWING_POOL = 14;
+let ywingModel = null;
+gltfLoader.load('public/y-wing.glb', (gltf) => {
+    const inner = gltf.scene;
+    inner.traverse(o => { if (o.isLight) o.visible = false; });   // lampes exportées de Sketchfab
+    const box = new THREE.Box3().setFromObject(inner);
+    const size = box.getSize(new THREE.Vector3());
+    inner.position.copy(box.getCenter(new THREE.Vector3())).negate();
+    const wrap = new THREE.Group();
+    wrap.add(inner);
+    wrap.scale.setScalar(38 / size.x);
+    wrap.rotation.y = Math.PI / 2;                                  // nez +X → -Z
+    ywingModel = new THREE.Group();
+    ywingModel.add(wrap);
+    for (let i = 0; i < YWING_POOL; i++) createXwing(ywingModel, 'ywing');
+});
 
-function updateEnemies(dt) {
-    const k = dt * LEGACY_TICK_RATE;
-    // 1. TOUJOURS mettre à jour la physique, même si invisible
-    enemies.forEach((enemy, index) => {
-        if (!enemy) return;
-        
-        const vel = enemy.userData.velocity;
-        
-        // 2. FORCER LA DIRECTION VERS LE VAISSEAU MÈRE (Z négatif)
-        vel.z = -35;
-        
-        // 3. MOUVEMENT EN BOUCLES
-        const time = performance.now() * 0.001;
-        const loopPhase = time * 0.5 + index;
-        const radius = 120;
-        
-        const targetX = Math.sin(loopPhase) * radius + Math.sin(time * 0.2 + index) * 150;
-        const targetY = Math.cos(loopPhase * 0.7) * radius + Math.cos(time * 0.3 + index) * 80;
-        
-        vel.x += (targetX - enemy.position.x) * 0.02 * dt * 30;
-        vel.y += (targetY - enemy.position.y) * 0.02 * dt * 30;
-        
-        // 4. APPLICATION DU MOUVEMENT
-        const newPosition = enemy.position.clone().addScaledVector(vel, dt);
-        
-        // 5. GESTION DE LA DISTANCE
-        if (newPosition.z < BATTLE_MIN_Z) { // ne jamais entrer dans la passerelle
-            newPosition.z = 900 + Math.random() * 300;
-            newPosition.x = (Math.random() - 0.5) * 600;
-            newPosition.y = (Math.random() - 0.5) * 200;
-            
-            vel.x = (Math.random() - 0.5) * 8;
-            vel.y = (Math.random() - 0.5) * 4;
-        }
-        
-        // 6. LIMITES LATÉRALES
-        if (Math.abs(newPosition.x) > 700) {
-            newPosition.x = Math.sign(newPosition.x) * 700;
-            vel.x *= -0.3;
-        }
-        if (Math.abs(newPosition.y) > 250) {
-            newPosition.y = Math.sign(newPosition.y) * 250;
-            vel.y *= -0.3;
-        }
-        
-        enemy.position.copy(newPosition);
-        
-        // 7. ORIENTATION (toujours basée sur la vélocité)
-        if (vel.length() > 0.1) {
-            const lookDir = vel.clone().normalize();
-            
-            if (!enemy.userData.targetQuat) {
-                enemy.userData.targetQuat = new THREE.Quaternion();
-            }
-            
-            const newTargetQuat = new THREE.Quaternion();
-            newTargetQuat.setFromUnitVectors(
-                new THREE.Vector3(0, 0, -1),
-                lookDir
-            );
-            
-            enemy.userData.targetQuat.slerp(newTargetQuat, 1 - Math.pow(1 - 0.05, k));
-            enemy.quaternion.slerp(enemy.userData.targetQuat, 1 - Math.pow(1 - 0.03, k));
-        }
-    });
-    
-    // 8. GÉRER LA VISIBILITÉ SÉPARÉMENT
-    enemies.forEach(enemy => {
-        if (enemy) enemy.visible = battleOn() && !enemy.userData.dead;
-    });
-}
-
-
-// ===================================================================
-// FONCTION DE SPAWN CORRIGÉE POUR X-WING
-// ===================================================================
-
-function spawnEnemy() {
-    if(!xwingModel) return;
-
-    let enemy = new THREE.Group();
-    let model = xwingModel.clone();
-    
-    // Orientation initiale vers le centre
-    model.rotation.y = 0;
+function createXwing(template = xwingModel, kind = 'xwing') {
+    const enemy = new THREE.Group();
+    const model = template.clone();
+    if (kind === 'xwing') model.rotation.y = 0;
     enemy.add(model);
-
-    // Arrivée depuis les 4 directions (N, S, E, O)
-    const directions = [
-        { x: 1, z: 0 },   // Est
-        { x: -1, z: 0 },  // Ouest
-        { x: 0, z: 1 },   // Nord (devant)
-        { x: 0, z: -1 }   // Sud (derrière)
-    ];
-    
-    const dir = directions[Math.floor(Math.random() * directions.length)];
-    
-    // Position de spawn éloignée
-    enemy.position.set(
-        dir.x * (1000 + Math.random() * 400),
-        (Math.random() - 0.5) * 300,
-        dir.z * (1000 + Math.random() * 400)
-    );
-
-    // Cibler une zone autour du joueur
-    const targetZone = new THREE.Vector3(
-        (Math.random() - 0.5) * 400,
-        (Math.random() - 0.5) * 200,
-        (Math.random() - 0.5) * 300
-    );
-    
-    const direction = targetZone.clone().sub(enemy.position).normalize();
-    const speed = 30 + Math.random() * 20;
-    
-    const now = performance.now() * 0.001;
-    
+    enemy.visible = false;
     enemy.userData = {
-        velocity: direction.multiplyScalar(speed),
+        kind,
+        phase: 'pool',
+        velocity: new THREE.Vector3(),
         targetQuat: null,
-        nextShot: now + 1 + Math.random() * 3,
-        fireRate: 1.5 + Math.random() * 2.5,
-        nextRandomExplosion: now + 5 + Math.random() * 10,
-        lastRandomExplosion: 0,
-        spawnTime: now,
-        targetZone: targetZone
+        dead: false,
+        t: 0
     };
-
-   
     scene.add(enemy);
     enemies.push(enemy);
 }
 
+function xwingActive(e) {
+    const ph = e.userData.phase;
+    return ph === 'formation' || ph === 'battle';
+}
 
-function spawnSquadron(count = 8) {
-    const baseZ = 300 + Math.random() * 200;
-    const baseY = (Math.random() - 0.5) * 150;
-    
-    for(let i = 0; i < count; i++) {
-        let enemy = new THREE.Group();
-        let model = xwingModel.clone();
-        model.rotation.y = 0; // même orientation que spawnEnemy (avant : PI → les X-Wing du départ volaient à l'envers)
-        enemy.add(model);
+// Oriente un X-Wing selon une direction (son avant est -Z)
+function faceXwing(enemy, dir) {
+    enemy.quaternion.setFromUnitVectors(_fwdX, dir.clone().normalize());
+    enemy.userData.targetQuat = enemy.quaternion.clone();
+}
 
-        const angle = (i / count) * Math.PI * 2;
-        
-        enemy.position.set(
-            Math.cos(angle) * 200 + (Math.random() - 0.5) * 80,
-            Math.sin(angle) * 80 + baseY,
-            baseZ + (Math.random() - 0.5) * 150
-        );
+/**
+ * Lance une escadrille. Avec un croiseur : elle sort de l'hyperespace devant lui.
+ * Sans croiseur : elle arrive seule, loin devant la passerelle.
+ */
+function launchSquadron(ship = null, size = null) {
+    // escadrille d'X-Wing, de Y-Wing ou mixte
+    const pool = enemies.filter(e => e.userData.phase === 'pool');
+    const r = Math.random();
+    const want = r < 0.25 ? 'ywing' : r < 0.45 ? null : 'xwing';
+    let reserve = want ? pool.filter(e => e.userData.kind === want) : pool.slice().sort(() => Math.random() - 0.5);
+    if (reserve.length < XWING.SQUAD[0]) reserve = pool;
+    const n = Math.min(reserve.length, size ?? Math.round(XWING.SQUAD[0] + Math.random() * (XWING.SQUAD[1] - XWING.SQUAD[0])));
+    if (n <= 0) return;
 
+    let anchor, fwd, quat;
+    if (ship) {
+        fwd = ship.heading.clone();
+        quat = ship.group.quaternion.clone();
+        anchor = ship.group.position.clone().addScaledVector(fwd, ship.radius + 60);
+    } else {
+        anchor = new THREE.Vector3((Math.random() - 0.5) * 1600, BATTLE_Y + (Math.random() - 0.3) * 300, 1800 + Math.random() * 900);
+        fwd = new THREE.Vector3(0, 0, 400).sub(anchor).setY(0).normalize();
+        quat = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(1, 0, 0), fwd);
+    }
 
-
-        const vel = new THREE.Vector3(
-            (Math.random() - 0.5) * 10,
-            (Math.random() - 0.5) * 5,
-            25 + Math.random() * 18
-        );
-
-        enemy.userData = {
-            velocity: vel,
-            targetQuat: null
-        };
-
-        scene.add(enemy);
-        enemies.push(enemy);
+    for (let i = 0; i < n; i++) {
+        const e = reserve[i];
+        const ud = e.userData;
+        // formation en V (repère du croiseur : x = avant, y = haut, z = côté)
+        const row = Math.floor((i + 1) / 2);
+        const side = i === 0 ? 0 : (i % 2 ? 1 : -1);
+        ud.slot = new THREE.Vector3(-row * 55, (Math.random() - 0.5) * 30, side * row * 60).applyQuaternion(quat);
+        ud.anchor = anchor;
+        ud.fwd = fwd.clone();
+        ud.ship = ship;
+        ud.phase = 'jump';
+        ud.t = -i * 0.12;                  // léger décalage : ils sortent l'un après l'autre
+        ud.dead = false;
+        ud.nextShot = undefined;
+        ud.nextRandomExplosion = undefined;
+        faceXwing(e, fwd);
     }
 }
 
-function checkEnemiesPosition() {
-    enemies.forEach(enemy => {
-        if (enemy.position.z < BATTLE_MIN_Z + 50) { // MODIFIÉ : 50 → 150
-            enemy.userData.velocity.z += 3; // Poussée plus douce
-        }
-        if (enemy.position.z > 600) { // NOUVEAU : limite supérieure
-            enemy.userData.velocity.z -= 3;
-        }
-    });
+// Vaisseau → phase "jump" / "formation" : position de sa place dans l'escadrille
+function formationPoint(ud, extra) {
+    const base = ud.ship && ud.ship.state !== 'dead'
+        ? ud.ship.group.position.clone().addScaledVector(ud.fwd, ud.ship.radius + 60)
+        : ud.anchor.clone();
+    return base.add(ud.slot).addScaledVector(ud.fwd, extra);
 }
 
-// Appeler checkEnemiesPosition toutes les 3 secondes au lieu de l'intervalle de téléportation
-setInterval(checkEnemiesPosition, 3000);
+function updateBattleWaves(dt) {
+    const on = battleOn();
+    if (on && !battleWasOn) {
+        // la bataille commence : les croiseurs rebelles arrivent un par un,
+        // chacun avec ses escadrilles (voir onArrive dans la section des croiseurs)
+        rebelFleet.setActive(true);
+        xwingReinforceTimer = XWING.REINFORCE_EVERY * 2;
+    }
+    if (!on && battleWasOn) {
+        // fin de la bataille : les croiseurs et les X-Wing repartent en hyperespace
+        rebelFleet.setActive(false);
+        enemies.forEach(e => {
+            const ud = e.userData;
+            if (ud.phase === 'battle' || ud.phase === 'formation') {
+                if (ud.phase === 'formation') ud.velocity.copy(ud.fwd);
+                ud.phase = 'leave';
+                ud.t = 0;
+                ud.velocity.normalize().multiplyScalar(120);
+                faceXwing(e, ud.velocity);
+            } else if (ud.phase !== 'leave') {
+                ud.phase = 'pool';
+                e.visible = false;
+            }
+        });
+    }
+    battleWasOn = on;
+
+    if (on) {
+        // renforts : toujours depuis un croiseur présent
+        xwingReinforceTimer -= dt;
+        const ship = rebelFleet.randomActiveShip();
+        if (xwingReinforceTimer <= 0 && ship) {
+            xwingReinforceTimer = XWING.REINFORCE_EVERY;
+            const active = enemies.filter(e => e.userData.phase !== 'pool').length;
+            if (active < XWING.MAX_ACTIVE) launchSquadron(ship);
+        }
+    }
+}
+
+function updateEnemies(dt) {
+    const k = dt * LEGACY_TICK_RATE;
+    const time = performance.now() * 0.001;
+
+    enemies.forEach((enemy, index) => {
+        const ud = enemy.userData;
+        const vel = ud.velocity;
+
+        if (ud.phase === 'pool') { enemy.visible = false; return; }
+
+        // ---------- sortie d'hyperespace
+        if (ud.phase === 'jump') {
+            ud.t += dt / XWING.JUMP_TIME;
+            const u = THREE.MathUtils.clamp(ud.t, 0, 1);
+            const e = 1 - Math.pow(1 - u, 4);
+            enemy.position.copy(formationPoint(ud, -XWING.JUMP_DISTANCE * (1 - e)));
+            enemy.scale.set(1, 1, 1 + 18 * Math.pow(1 - e, 2));
+            enemy.visible = ud.t > 0 && battleOn();
+            if (u >= 1) {
+                enemy.scale.set(1, 1, 1);
+                fx.flash(enemy.position, 14, new THREE.Color(0.75, 0.85, 1), 0.3);
+                ud.phase = 'formation';
+                ud.t = 0;
+            }
+            return;
+        }
+
+        // ---------- vol en formation, puis dispersion
+        if (ud.phase === 'formation') {
+            ud.t += dt;
+            enemy.position.copy(formationPoint(ud, ud.t * XWING.FORMATION_SPEED));
+            enemy.visible = battleOn();
+            if (ud.t >= XWING.FORMATION_TIME + index % 5 * 0.4) {
+                ud.phase = 'battle';
+                // départ en dispersion : chacun pique dans sa propre direction
+                vel.copy(ud.fwd).multiplyScalar(XWING.FORMATION_SPEED)
+                   .add(new THREE.Vector3((Math.random() - 0.5) * 60, (Math.random() - 0.5) * 40, (Math.random() - 0.5) * 60));
+            }
+            return;
+        }
+
+        // ---------- départ en hyperespace
+        if (ud.phase === 'leave') {
+            ud.t += dt;
+            vel.multiplyScalar(1 + dt * 6);
+            enemy.position.addScaledVector(vel, dt);
+            enemy.scale.set(1, 1, 1 + ud.t * 40);
+            if (ud.t > 0.6) { ud.phase = 'pool'; enemy.visible = false; enemy.scale.set(1, 1, 1); }
+            return;
+        }
+
+        // ---------- combat (mouvement "en boucles" d'origine, adouci)
+        // vers le destroyer impérial (Z négatif), sans demi-tour brutal
+        vel.z += (-35 - vel.z) * (1 - Math.exp(-0.8 * dt));
+
+        const loopPhase = time * 0.5 + index;
+        const radius = 120;
+        const targetX = Math.sin(loopPhase) * radius + Math.sin(time * 0.2 + index) * 150;
+        const targetY = BATTLE_Y + Math.cos(loopPhase * 0.7) * radius + Math.cos(time * 0.3 + index) * 80;
+
+        vel.x += (targetX - enemy.position.x) * 0.02 * dt * 30;
+        vel.y += (targetY - enemy.position.y) * 0.02 * dt * 30;
+        // amortissement : fini les glissades latérales à 250 unités/s
+        const damp = Math.exp(-0.9 * dt);
+        vel.x *= damp;
+        vel.y *= damp;
+
+        enemy.position.addScaledVector(vel, dt);
+
+        // proche du destroyer : saut en hyperespace
+        if (enemy.position.z < XWING.LEAVE_Z) {
+            ud.phase = 'leave';
+            ud.t = 0;
+            vel.set(vel.x * 0.3, 60, 0).add(new THREE.Vector3(0, 0, -200)).normalize().multiplyScalar(120);
+            faceXwing(enemy, vel);
+            fx.flash(enemy.position, 10, new THREE.Color(0.75, 0.85, 1), 0.25);
+            return;
+        }
+
+        // orientation (toujours basée sur la vélocité)
+        if (vel.length() > 0.1) {
+            const lookDir = vel.clone().normalize();
+            if (!ud.targetQuat) ud.targetQuat = enemy.quaternion.clone();
+            const newTargetQuat = new THREE.Quaternion().setFromUnitVectors(_fwdX, lookDir);
+            ud.targetQuat.slerp(newTargetQuat, 1 - Math.pow(1 - 0.05, k));
+            enemy.quaternion.slerp(ud.targetQuat, 1 - Math.pow(1 - 0.03, k));
+        }
+
+        enemy.visible = battleOn() && !ud.dead;
+    });
+}
 
 // ===================================================================
 // SYSTÈME D'EXPLOSIONS - TAILLE CORRIGÉE + ANNEAU PARFAIT
@@ -2539,6 +2750,7 @@ setInterval(checkEnemiesPosition, 3000);
 // -------------------------------------------------------------------
 const videoex = document.createElement("video");
 videoex.src = 'public/explosion.mp4';
+videoex.preload = 'none';   // (ancienne explosion vidéo, plus utilisée par défaut)
 videoex.loop = false;
 videoex.muted = true;
 videoex.playsInline = true;
@@ -3027,39 +3239,20 @@ function updateExplosions(dt) {
 // -------------------------------------------------------------------
 
 function destroyEnemy(enemy, byPlayer = false) {
-    if (!enemy || !enemy.visible || enemy.userData.dead) return;
+    if (!enemy || enemy.userData.dead || !xwingActive(enemy)) return;
     enemy.userData.dead = true;
     enemy.visible = false;
 
     fx.explosion(enemy.position.clone(), byPlayer ? 20 : 15);
+    debris.spawn(enemy.position, 6, { speed: [10, 40], size: [0.8, 2.5], life: [2, 4], baseVel: enemy.userData.velocity, hot: 0.6 });
 
     if (byPlayer) {
         playerKills++;
-        hud.setScore(playerKills);
-        if (explosion && explosion.buffer) { explosion.stop(); explosion.play(); }
+        hud.setScore(playerKills);   // (le son de l'explosion est joué par fx.explosion, spatialisé)
     }
 
-    scene.remove(enemy);
-    enemies = enemies.filter(e => e !== enemy);
-
-    // un nouvel X-Wing arrive pour garder la bataille vivante
-    setTimeout(() => spawnEnemy(), 2000);
-}
-
-function destroyEnemyWithRing(enemy) {
-    const pos = enemy.position.clone();
-    enemy.visible = false;
-    
-    createRingExplosionComplete(pos, 12);
-    
-    setTimeout(() => {
-        scene.remove(enemy);
-        enemies = enemies.filter(e => e !== enemy);
-    }, 100);
-    
-    setTimeout(() => {
-        spawnEnemy();
-    }, 800);
+    // retour en réserve : il reviendra avec une escadrille de renfort
+    enemy.userData.phase = 'pool';
 }
 
 // ===================================================================
@@ -3090,71 +3283,187 @@ function createQuickExplosion(position, scale = 8) {
 }
 
 // -------------------------------------------------------------------
-// 3. CHARGEUR TIE
+// 3. TIE ALLIÉS — décollent de la coque du destroyer
 // -------------------------------------------------------------------
+// phases : 'pool' (réserve) → 'launch' (sortent de la coque) → 'battle'
+//          → 'land' (replongent vers la coque) → 'pool'
+const TIE_WING = {
+    POOL: 24,
+    LAUNCH_TIME: 1.6,
+    REINFORCE_EVERY: 3,
+    MAX_ACTIVE: 22
+};
+let tieReinforceTimer = 0;
+let tieBattleWasOn = false;
+const _fwdTie = new THREE.Vector3(0, 0, 1);
 
 gltfLoader.load('public/tieinterlow.glb', (gltf) => {
     tieModel = gltf.scene;
     tieModel.scale.set(0.5,0.5,0.5);
     tieModel.rotation.y += Math.PI;
 
-    
-    console.log("✅ TIE Interceptor chargé !");
-    
-    // Créer les TIE mais les cacher
-    for(let i = 0; i < 30; i++) {
-        spawnTie();
-    }
-    
-    // Les cacher immédiatement après création
-    friendlyShips.forEach(tie => {
-        tie.visible = false;
-    });
-// FORCER UNE PREMIÈRE MISE À JOUR POUR LES TIE
-    if (friendlyShips.length > 0 && typeof updateTies === 'function') {
-        for(let i = 0; i < 50; i++) {
-            updateTies(0.1);
-        }
-    }
+    for (let i = 0; i < TIE_WING.POOL; i++) createTie();
+    createPatrols();
 });
 
-// ===================================================================
-// FONCTION DE SPAWN CORRIGÉE POUR TIE
-// ===================================================================
+// -------------------------------------------------------------------
+// 4. PATROUILLES DE TIE INTERCEPTOR AUTOUR DE LA TOUR DU PONT
+// -------------------------------------------------------------------
+// Formations en V qui tournent autour de la tour pour surveiller la zone.
+// Rayon, altitude, vitesse et sens changent au hasard de temps en temps.
+const PATROL = {
+    GROUPS: 3,
+    SLOTS: [new THREE.Vector3(0, 0, 0), new THREE.Vector3(-45, 4, -40), new THREE.Vector3(45, -4, -40)], // (côté, haut, avant)
+    CENTER: new THREE.Vector3(0, 0, 0),   // la tour du pont
+    RADIUS: [320, 700],                   // reste loin de la tour (±185) et du canon (z 200)
+    ALT: [40, 280],                       // au-dessus de la coque de l'Executor (y ≈ -80)
+    SPEED: [55, 95]
+};
+const patrols = [];
+const prand = (a, b) => a + Math.random() * (b - a);
 
-function spawnTie() {
-    if(!tieModel) return;
+function createPatrols() {
+    for (let g = 0; g < PATROL.GROUPS; g++) {
+        const p = {
+            angle: Math.random() * Math.PI * 2,
+            dir: Math.random() < 0.5 ? 1 : -1,
+            radius: prand(...PATROL.RADIUS), alt: prand(...PATROL.ALT), speed: prand(...PATROL.SPEED),
+            timer: 0,
+            pos: new THREE.Vector3(), prev: new THREE.Vector3(), fwd: new THREE.Vector3(0, 0, 1),
+            members: []
+        };
+        p.radiusTarget = p.radius; p.altTarget = p.alt; p.speedTarget = p.speed;
+        PATROL.SLOTS.forEach(() => {
+            const tie = new THREE.Group();
+            const model = tieModel.clone();
+            model.rotation.y = Math.PI;
+            // matériaux propres : on peut les estomper (hyperespace) sans toucher aux TIE de la bataille
+            model.traverse(o => { if (o.isMesh) o.material = o.material.clone(); });
+            tie.add(model);
+            scene.add(tie);
+            p.members.push(tie);
+        });
+        patrols.push(p);
+    }
+}
 
+function updatePatrols(dt) {
+    if (!patrols.length || dt <= 0) return;
+    const t = performance.now() * 0.001;
+    const up = new THREE.Vector3(0, 1, 0);
 
-    let tie = new THREE.Group();
-    let model = tieModel.clone();
-    model.rotation.y = Math.PI; // Même orientation que les X-Wing
+    // Hyperespace : comme les autres vaisseaux autour (voir objectFade), les patrouilles
+    // glissent en s'estompant, restent cachées pendant le saut, puis reviennent.
+    const hyperOffset = objectFade === 'fadeOut' ? -hyperMoveDistance * (1 - objectOpacity)
+                      : objectFade === 'fadeIn'  ?  hyperMoveDistance * (1 - objectOpacity) : 0;
+    const shown = objectFade !== 'hidden';
+    const fading = objectFade === 'fadeOut' || objectFade === 'fadeIn';
+
+    patrols.forEach((p, gi) => {
+        // nouvelle consigne de vol de temps en temps
+        p.timer -= dt;
+        if (p.timer <= 0) {
+            p.timer = prand(5, 12);
+            p.radiusTarget = prand(...PATROL.RADIUS);
+            p.altTarget = prand(...PATROL.ALT);
+            p.speedTarget = prand(...PATROL.SPEED);
+            if (Math.random() < 0.2) p.dir *= -1;      // demi-tour de la patrouille
+        }
+        const k = 1 - Math.exp(-0.3 * dt);
+        p.radius += (p.radiusTarget - p.radius) * k;
+        p.alt += (p.altTarget - p.alt) * k;
+        p.speed += (p.speedTarget - p.speed) * k;
+
+        // le chef de patrouille tourne autour de la tour
+        p.angle += p.dir * p.speed / p.radius * dt;
+        p.prev.copy(p.pos);
+        p.pos.set(Math.sin(p.angle) * p.radius, p.alt + Math.sin(t * 0.4 + gi * 2) * 20, Math.cos(p.angle) * p.radius).add(PATROL.CENTER);
+        const step = p.pos.clone().sub(p.prev);
+        if (step.lengthSq() > 1e-6) p.fwd.lerp(step.normalize(), 1 - Math.exp(-4 * dt)).normalize();
+
+        // repère de la formation + inclinaison vers l'intérieur du virage
+        const side = new THREE.Vector3().crossVectors(p.fwd, up).normalize();
+        const upF = new THREE.Vector3().crossVectors(side, p.fwd).normalize();
+        const roll = -p.dir * 0.35;
+
+        p.members.forEach((tie, i) => {
+            const s = PATROL.SLOTS[i];
+            const target = p.pos.clone().addScaledVector(side, s.x).addScaledVector(upF, s.y).addScaledVector(p.fwd, s.z);
+            if (tie.userData.placed) tie.position.lerp(target, 1 - Math.exp(-4 * dt));
+            else { tie.position.copy(target); tie.userData.placed = true; }
+            tie.quaternion.setFromUnitVectors(_fwdTie, p.fwd);
+            tie.rotateZ(roll + Math.sin(t * 1.3 + i + gi) * 0.05);   // petit balancement
+
+            // hyperespace
+            tie.visible = shown;
+            tie.position.z += hyperOffset;
+            if (fading || tie.userData.faded) {
+                setOpacityRecursive(tie, fading ? objectOpacity : 1);
+                tie.userData.faded = fading;
+            }
+        });
+    });
+}
+
+function createTie() {
+    const tie = new THREE.Group();
+    const model = tieModel.clone();
+    model.rotation.y = Math.PI;
     tie.add(model);
-
-    // Position DEVANT le vaisseau mère (Z positif)
-    tie.position.set(
-        (Math.random() - 0.5) * 600,
-        (Math.random() - 0.5) * 200,
-        200 + Math.random() * 300
-    );
-
-    const now = performance.now() * 0.001;
-    
+    tie.visible = false;
     tie.userData = {
-        velocity: new THREE.Vector3(
-            (Math.random() - 0.5) * 12,
-            (Math.random() - 0.5) * 6,
-            25 + Math.random() * 15       // TOUJOURS POSITIF = vers l'avant
-        ),
+        phase: 'pool',
+        velocity: new THREE.Vector3(),
         targetQuat: null,
         type: 'tie',
-        nextShot: now + 1 + Math.random() * 3,
-        fireRate: 1.5 + Math.random() * 2.5,
-        nextRandomExplosion: now + 5 + Math.random() * 10
+        dead: false,
+        t: 0
     };
-
     scene.add(tie);
     friendlyShips.push(tie);
+}
+
+function launchTie() {
+    const tie = friendlyShips.find(t => t.userData.phase === 'pool');
+    if (!tie) return;
+    const ud = tie.userData;
+    // départ À L'INTÉRIEUR de la coque : le TIE "sort" du pont en montant
+    tie.position.set((Math.random() < 0.5 ? -1 : 1) * (80 + Math.random() * 200), -190, 450 + Math.random() * 900);
+    ud.velocity.set((Math.random() - 0.5) * 30, 70, 25 + Math.random() * 20);
+    ud.phase = 'launch';
+    ud.t = 0;
+    ud.age = 0;
+    ud.patrol = 1;
+    ud.dead = false;
+    ud.nextShot = undefined;
+    ud.nextRandomExplosion = undefined;
+    tie.quaternion.setFromUnitVectors(_fwdTie, ud.velocity.clone().normalize());
+    ud.targetQuat = tie.quaternion.clone();
+}
+
+function updateTieWaves(dt) {
+    const on = battleOn();
+    if (on && !tieBattleWasOn) {
+        for (let i = 0; i < 16; i++) setTimeout(() => { if (battleOn()) launchTie(); }, i * 250);
+        tieReinforceTimer = 5;
+    }
+    if (!on && tieBattleWasOn) {
+        // fin de la bataille : les TIE en vol rentrent vers la coque
+        friendlyShips.forEach(t => {
+            const ud = t.userData;
+            if (ud.phase === 'battle' || ud.phase === 'launch') { ud.phase = 'land'; ud.t = 0; }
+            else if (ud.phase !== 'land') { ud.phase = 'pool'; t.visible = false; }
+        });
+    }
+    tieBattleWasOn = on;
+    if (on) {
+        tieReinforceTimer -= dt;
+        if (tieReinforceTimer <= 0) {
+            tieReinforceTimer = TIE_WING.REINFORCE_EVERY;
+            const active = friendlyShips.filter(t => t.userData.phase !== 'pool').length;
+            if (active < TIE_WING.MAX_ACTIVE) launchTie();
+        }
+    }
 }
 
 // -------------------------------------------------------------------
@@ -3164,74 +3473,52 @@ function spawnTie() {
 function updateTies(dt) {
     if (!tieModel) return;
     const k = dt * LEGACY_TICK_RATE;
-    
     const time = performance.now() * 0.001;
 
     friendlyShips.forEach((tie, index) => {
-        if (!tie) return;
-        
-        const vel = tie.userData.velocity;
-        
-        // 1. FORCER LA DIRECTION VERS LE VAISSEAU MÈRE
-        vel.z = -35;
-        
-        // 2. MOUVEMENT EN BOUCLES
-        const loopPhase = time * 0.5 + index + 10;
-        const radius = 120;
-        
-        const targetX = Math.sin(loopPhase) * radius + Math.sin(time * 0.2 + index) * 150;
-        const targetY = Math.cos(loopPhase * 0.7) * radius + Math.cos(time * 0.3 + index) * 80;
-        
-        vel.x += (targetX - tie.position.x) * 0.02 * dt * 30;
-        vel.y += (targetY - tie.position.y) * 0.02 * dt * 30;
-        
-        // 3. APPLICATION
-        const newPosition = tie.position.clone().addScaledVector(vel, dt);
-        
-        // 4. GESTION DE LA DISTANCE
-        if (newPosition.z < BATTLE_MIN_Z) { // ne jamais entrer dans la passerelle
-            newPosition.z = 900 + Math.random() * 300;
-            newPosition.x = (Math.random() - 0.5) * 600;
-            newPosition.y = (Math.random() - 0.5) * 200;
-            
-            vel.x = (Math.random() - 0.5) * 8;
-            vel.y = (Math.random() - 0.5) * 4;
+        const ud = tie.userData;
+        const vel = ud.velocity;
+
+        if (ud.phase === 'pool') { tie.visible = false; return; }
+
+        if (ud.phase === 'launch') {
+            ud.t += dt;
+            if (ud.t > TIE_WING.LAUNCH_TIME) ud.phase = 'battle';
+        } else if (ud.phase === 'land') {
+            ud.t += dt;
+            vel.y += (-80 - vel.y) * (1 - Math.exp(-2 * dt));
+            if (ud.t > 2.2) { ud.phase = 'pool'; tie.visible = false; return; }
+        } else {
+            // combat : patrouille entre le destroyer et la flotte rebelle
+            ud.age = (ud.age || 0) + dt;
+            if (tie.position.z > 2000) ud.patrol = -1;
+            else if (tie.position.z < 600) ud.patrol = 1;
+            vel.z += (35 * ud.patrol - vel.z) * (1 - Math.exp(-0.8 * dt));
+            const loopPhase = time * 0.5 + index + 10;
+            const radius = 120;
+            const targetX = Math.sin(loopPhase) * radius + Math.sin(time * 0.2 + index) * 150;
+            const targetY = BATTLE_Y + Math.cos(loopPhase * 0.7) * radius + Math.cos(time * 0.3 + index) * 80;
+            vel.x += (targetX - tie.position.x) * 0.02 * dt * 30;
+            vel.y += (targetY - tie.position.y) * 0.02 * dt * 30;
+            const damp = Math.exp(-0.9 * dt);
+            vel.x *= damp;
+            vel.y *= damp;
+
+            // après un long combat : retour vers la coque (atterrissage)
+            if (ud.age > 40 && tie.position.z < 900) { ud.phase = 'land'; ud.t = 0; }
         }
-        
-        // 5. LIMITES LATÉRALES
-        if (Math.abs(newPosition.x) > 700) {
-            newPosition.x = Math.sign(newPosition.x) * 700;
-            vel.x *= -0.3;
-        }
-        if (Math.abs(newPosition.y) > 250) {
-            newPosition.y = Math.sign(newPosition.y) * 250;
-            vel.y *= -0.3;
-        }
-        
-        tie.position.copy(newPosition);
-        
-        // 6. ORIENTATION
+
+        tie.position.addScaledVector(vel, dt);
+
+        // orientation
         if (vel.length() > 0.1) {
-            const lookDir = vel.clone().normalize();
-            
-            if (!tie.userData.targetQuat) {
-                tie.userData.targetQuat = new THREE.Quaternion();
-            }
-            
-            const newTargetQuat = new THREE.Quaternion();
-            newTargetQuat.setFromUnitVectors(
-                new THREE.Vector3(0, 0, 1),
-                lookDir
-            );
-            
-            tie.userData.targetQuat.slerp(newTargetQuat, 1 - Math.pow(1 - 0.05, k));
-            tie.quaternion.slerp(tie.userData.targetQuat, 1 - Math.pow(1 - 0.03, k));
+            if (!ud.targetQuat) ud.targetQuat = tie.quaternion.clone();
+            const newTargetQuat = new THREE.Quaternion().setFromUnitVectors(_fwdTie, vel.clone().normalize());
+            ud.targetQuat.slerp(newTargetQuat, 1 - Math.pow(1 - 0.05, k));
+            tie.quaternion.slerp(ud.targetQuat, 1 - Math.pow(1 - 0.03, k));
         }
-    });
-    
-    // GÉRER LA VISIBILITÉ SÉPARÉMENT
-    friendlyShips.forEach(tie => {
-        if (tie) tie.visible = battleOn() && !tie.userData.dead;
+
+        tie.visible = (battleOn() || ud.phase === 'land') && !ud.dead;
     });
 }
 
@@ -3247,6 +3534,7 @@ function createLaser(position, direction, color, isEnemy, range = 420) {
         hitTest: isEnemy ? rebelBoltHitTest : empireBoltHitTest,
         onHit: isEnemy ? onRebelBoltHit : onEmpireBoltHit
     });
+    laserSoundAt(position, isEnemy);
 }
 
 // tirs verts des TIE alliés → X-Wing
@@ -3299,7 +3587,7 @@ function updateShooting(dt) {
     
     // Tirs des X-Wing
     enemies.forEach(enemy => {
-        if (!enemy || !enemy.visible) return;
+        if (!enemy || !enemy.visible || enemy.userData.phase !== 'battle') return;
         
         // Initialisation avec décalage aléatoire
         if (enemy.userData.nextShot === undefined) {
@@ -3334,7 +3622,7 @@ function updateShooting(dt) {
     
     // Tirs des TIE
     friendlyShips.forEach(tie => {
-        if (!tie || !tie.visible) return;
+        if (!tie || !tie.visible || tie.userData.phase !== 'battle') return;
         
         if (tie.userData.nextShot === undefined) {
             tie.userData.nextShot = time + Math.random() * 3;
@@ -3368,7 +3656,7 @@ function randomExplosions(dt) {
     
     // X-Wing explosent aléatoirement
     enemies.forEach(enemy => {
-        if (!enemy || !enemy.visible) return;
+        if (!enemy || !enemy.visible || enemy.userData.phase !== 'battle') return;
         
         if (enemy.userData.nextRandomExplosion === undefined) {
             enemy.userData.nextRandomExplosion = time + 3 + Math.random() * 8;
@@ -3393,7 +3681,7 @@ function randomExplosions(dt) {
     
     // TIE explosent aléatoirement
     friendlyShips.forEach(tie => {
-        if (!tie || !tie.visible) return;
+        if (!tie || !tie.visible || tie.userData.phase !== 'battle') return;
         
         if (tie.userData.nextRandomExplosion === undefined) {
             tie.userData.nextRandomExplosion = time + 3 + Math.random() * 8;
@@ -3421,16 +3709,14 @@ function randomExplosions(dt) {
 // 9. DESTRUCTION DES TIE
 // -------------------------------------------------------------------
 function destroyTie(tie) {
-    if (!tie || !tie.visible || tie.userData.dead) return;
+    if (!tie || tie.userData.dead || tie.userData.phase !== 'battle') return;
     if (!battleOn()) return;
     tie.userData.dead = true;
     tie.visible = false;
 
     fx.explosion(tie.position.clone(), 15);
-
-    scene.remove(tie);
-    friendlyShips = friendlyShips.filter(t => t !== tie);
-    setTimeout(() => spawnTie(), 3000);
+    debris.spawn(tie.position, 5, { speed: [10, 40], size: [0.8, 2.5], life: [2, 4], baseVel: tie.userData.velocity, hot: 0.6 });
+    tie.userData.phase = 'pool';
 }
 // -------------------------------------------------------------------
 // 10. FONCTION DE MISE À JOUR GLOBALE
@@ -3439,7 +3725,7 @@ function destroyTie(tie) {
 function updateCombat(dt) {
     if (!tieModel) return;
     
-    // On enlève la condition !cannonActive ici aussi
+    updateTieWaves(dt);
     updateTies(dt);
     updateShooting(dt);
     updateLasers(dt);
@@ -3454,338 +3740,69 @@ function updateCombat(dt) {
 
 
 // ===================================================================
-// GRANDS VAISSEAUX ENNEMIS - VERSION AVEC 3 PARTIES
+// GRANDS CROISEURS REBELLES (logique dans src/fleet.js)
 // ===================================================================
+const debris = new DebrisField(scene, fx);
 
-let capitalShipParts = {
-    part1: null,
-    part2: null,
-    part3: null
-};
-let pivotRebel = new THREE.Group();
-let capitalShips = [];  // Tableau des vaisseaux complets
+// Destroyers impériaux que les croiseurs doivent éviter :
+// la coque du destroyer du joueur (approchée par des sphères) + ceux qui tournent autour
+// (la coque de l'Executor est sous la zone des croiseurs : seule la tourelle dépasse)
+const HULL_SPHERES = [
+    { center: new THREE.Vector3(0, -40, 0), radius: 350 }
+];
+function imperialObstacles() {
+    const list = HULL_SPHERES.slice();
+    pivot.children.forEach(sd => list.push({ center: sd.getWorldPosition(new THREE.Vector3()), radius: 380 }));
+    return list;
+}
 
-const CAPITAL_SHIP = {
-    POSITION: new THREE.Vector3(0, 0, 1500),
-    ROTATION_SPEED: 0.1,
-    MAX_HITS_PER_PART: 10,       // tirs pour détruire une partie (tir automatique)
-    SPAWN_COUNT: 2,
-    SPACING: 2000
-};
-
-// ===================================================================
-// CHARGEMENT DES 3 PARTIES
-// ===================================================================
-
-let partsLoaded = 0;
-
-// Partie 1
-gltfLoader.load('public/capital_part1.glb', (gltf) => {
-    capitalShipParts.part1 = gltf.scene;
-    capitalShipParts.part1.scale.set(0.5,0.5,0.5);  // Ajustez l'échelle
-    capitalShipParts.part1.rotation.y = Math.PI/2;
-    console.log("✅ Partie 1 chargée");
-    partsLoaded++;
-    tryCreateCapitalShips();
+const rebelFleet = new RebelFleet({
+    scene, fx, debris,
+    obstacles: imperialObstacles,
+    // un croiseur qui arrive pendant la bataille amène son escadrille d'X-Wing
+    onArrive: (ship) => {
+        if (!battleOn()) return;
+        launchSquadron(ship);
+        setTimeout(() => { if (battleOn() && ship.state === 'cruise') launchSquadron(ship); }, 1800);
+    },
+    onPartDestroyed: () => {}   // son : la grosse explosion joue déjà un "boom" spatialisé
 });
 
-// Partie 2
-gltfLoader.load('public/capital_part2.glb', (gltf) => {
-    capitalShipParts.part2 = gltf.scene;
-    capitalShipParts.part2.scale.set(0.5,0.5,0.5);
-    capitalShipParts.part2.rotation.y = Math.PI/2;
-    console.log("✅ Partie 2 chargée");
-    partsLoaded++;
-    tryCreateCapitalShips();
-});
-
-// Partie 3
-gltfLoader.load('public/capital_part3.glb', (gltf) => {
-    capitalShipParts.part3 = gltf.scene;
-    capitalShipParts.part3.scale.set(0.5,0.5,0.5);
-    capitalShipParts.part3.rotation.y = Math.PI/2;
-    console.log("✅ Partie 3 chargée");
-    partsLoaded++;
-    tryCreateCapitalShips();
-});
-
-// ===================================================================
-// CRÉATION D'UN VAISSEAU COMPLET
-// ===================================================================
-
-function createCapitalShip(xOffset = 0) {
-    const shipGroup = new THREE.Group();
-    const parts = [];
-    
-    // Cloner chaque partie et l'ajouter au groupe
-    // Comme elles ont la même origine, elles se placent automatiquement
-    // dans la bonne position relative les unes par rapport aux autres
-    
-    const partTypes = ['part1', 'part2', 'part3'];
-    
-    partTypes.forEach((type, index) => {
-        if (!capitalShipParts[type]) return;
-        
-        // Cloner la partie
-        const part = capitalShipParts[type].clone();
-        
-        // Ajouter les données utilisateur
-        part.userData = {
-            type: type,
-            hits: 0,
-            maxHits: CAPITAL_SHIP.MAX_HITS_PER_PART,
-            destroyed: false,
-            explosionTime: 0
-        };
-        
-        // Sauvegarder le matériau original
-        part.userData.originalMaterial = [];
-        part.traverse(child => {
-            if (child.isMesh) {
-                // matériau propre à chaque vaisseau (sinon ils clignotent tous ensemble)
-                child.material = child.material.clone();
-                child.userData.originalMaterial = child.material.clone();
-                child.userData.hitMaterial = child.material.clone();
-                if (child.userData.hitMaterial.emissive) {
-                    child.userData.hitMaterial.emissive.setHex(0xaa0000);
-                }
-            }
-        });
-        
-        shipGroup.add(part);
-        parts.push(part);
+const capitalTemplates = [null, null, null];
+['public/capital_part1.glb', 'public/capital_part2.glb', 'public/capital_part3.glb'].forEach((url, i) => {
+    gltfLoader.load(url, (gltf) => {
+        const part = gltf.scene;
+        part.scale.set(0.5, 0.5, 0.5);
+        part.rotation.y = Math.PI / 2;
+        capitalTemplates[i] = part;
+        // Home One (MC80) : 3 parties avant / milieu / arrière
+        if (capitalTemplates.every(Boolean)) rebelFleet.addType('homeone', { parts: capitalTemplates, hits: 10, radius: 380, speed: 24 });
     });
-    
-    // Positionner le vaisseau
-    shipGroup.position.set(xOffset, 0, CAPITAL_SHIP.POSITION.z);
-    
-    // Données du vaisseau
-    shipGroup.userData = {
-        parts: parts,
-        destroyed: false,
-        xOffset: xOffset
-    };
-    
-    return { group: shipGroup, parts: parts };
-}
+});
 
-// ===================================================================
-// CRÉATION DES VAISSEAUX (QUAND TOUTES LES PARTIES SONT CHARGÉES)
-// ===================================================================
-
-function tryCreateCapitalShips() {
-    // Attendre que les 3 parties soient chargées
-    if (partsLoaded < 3) return;
-    
-    console.log("🚀 Création des vaisseaux capitaux...");
-    
-    // Créer le pivot
-    pivotRebel.position.set(0, 0, 0);
-    scene.add(pivotRebel);
-    
-    // Créer plusieurs vaisseaux
-    for (let i = 0; i < CAPITAL_SHIP.SPAWN_COUNT; i++) {
-        const xOffset = (i - (CAPITAL_SHIP.SPAWN_COUNT - 1) / 2) * CAPITAL_SHIP.SPACING;
-        const { group, parts } = createCapitalShip(xOffset);
-        
-        pivotRebel.add(group);
-        
-        capitalShips.push({
-            group: group,
-            parts: parts,
-            hitboxes: []  // Sera rempli plus tard
-        });
-    }
-    
-    console.log(`✅ ${CAPITAL_SHIP.SPAWN_COUNT} vaisseaux capitaux créés`);
-}
-
-// ===================================================================
-// MISE À JOUR
-// ===================================================================
-
-function updateCapitalShips(dt) {
-    // Faire tourner le pivot
-    pivotRebel.rotation.y += CAPITAL_SHIP.ROTATION_SPEED * dt;
-    
-    // Mettre à jour les effets de hit
-    capitalShips.forEach(ship => {
-        ship.parts.forEach(part => {
-            if (part.userData.explosionTime > 0) {
-                part.userData.explosionTime -= dt;
-                
-                // Effet de scintillement
-                if (part.userData.explosionTime > 0) {
-                    const intensity = Math.sin(part.userData.explosionTime * 30) * 0.5 + 0.5;
-                    part.traverse(child => {
-                        if (child.isMesh && child.material.emissive) {
-                            child.material.emissive.setHSL(0, 1, intensity * 0.3);
-                        }
-                    });
-                } else {
-                    // Restaurer le matériau original
-                    part.traverse(child => {
-                        if (child.isMesh && child.userData.originalMaterial) {
-                            child.material.copy(child.userData.originalMaterial);
-                        }
-                    });
-                }
-            }
-        });
+// Autres vaisseaux rebelles (une seule partie). Même pack que le Home One :
+// même échelle (0.5) et même orientation (réacteurs à l'arrière, avant → +X).
+//   hits : tirs pour le détruire, radius : taille (évitements, explosions, place des escadrilles)
+[
+    { name: 'liberty',   url: 'public/liberty.glb',   hits: 16, radius: 380, speed: 22 },   // ~700 de long
+    { name: 'frigate',   url: 'public/frigate.glb',   hits: 10, radius: 170, speed: 28 },   // Nebulon-B, ~300
+    // corvette CR-90 : version allégée, agrandie ×3 (sinon on la voyait à peine) et qui
+    // navigue plus près du pont pour être bien visible depuis les fenêtres
+    { name: 'cr90',      url: 'public/CR90_lite.glb', hits: 8,  radius: 130, speed: 40, scale: 1.5,
+      zone: { minZ: 550, maxZ: 1500, maxX: 900, minY: 150, maxY: 420 } },                    // ~225 de long
+    // transport GR-75 : agrandi ×4,4 (à 45 de long, il était invisible au loin)
+    { name: 'transport', url: 'public/transport.glb', hits: 6,  radius: 115, speed: 32, scale: 2.2,
+      zone: { minZ: 700, maxZ: 1900, maxX: 1100, minY: 150, maxY: 450 } }                    // ~195 de long
+].forEach(t => {
+    gltfLoader.load(t.url, (gltf) => {
+        const ship = gltf.scene;
+        ship.scale.setScalar(t.scale || 0.5);
+        ship.rotation.y = Math.PI / 2;
+        const def = { parts: [ship], hits: t.hits, radius: t.radius, speed: t.speed };
+        if (t.zone) def.zone = t.zone;
+        rebelFleet.addType(t.name, def);
     });
-}
-
-// ===================================================================
-// DÉTECTION DES TIRS
-// ===================================================================
-
-function checkCapitalShipHit(laserPosition) {
-    for (let ship of capitalShips) {
-        for (let part of ship.parts) {
-            if (part.userData.destroyed) continue;
-            
-            // Récupérer la position mondiale de la partie
-            const worldPos = part.getWorldPosition(new THREE.Vector3());
-            
-            // Vérifier la distance (ajustez le rayon selon la taille)
-            const distance = laserPosition.distanceTo(worldPos);
-            if (distance < 150) {  // Rayon de détection
-                return hitCapitalShipPart(ship, part, laserPosition);
-            }
-        }
-    }
-    return false;
-}
-
-// ===================================================================
-// VERSION MODIFIÉE DE hitCapitalShipPart AVEC LOGS
-// ===================================================================
-
-// ===================================================================
-// VERSION SIMPLIFIÉE POUR TEST
-// ===================================================================
-
-function hitCapitalShipPart(ship, part, hitPosition) {
-    if (part.userData.destroyed) return false;
-
-    part.userData.hits++;
-    part.userData.explosionTime = 0.3;   // clignotement rouge
-    createPartHitExplosion(hitPosition);
-
-    if (part.userData.hits >= part.userData.maxHits) {
-        destroyCapitalShipPart(ship, part);
-        return true;
-    }
-    return false;
-}
-
-// ===================================================================
-// EXPLOSION LOCALISÉE (QUAND ON TIRE SUR UNE PARTIE)
-// ===================================================================
-
-function createPartHitExplosion(position) {
-    fx.explosion(position, 9);
-}
-
-// ===================================================================
-// DESTRUCTION D'UNE PARTIE (AU BOUT DE 3 TIRS)
-// ===================================================================
-
-function destroyCapitalShipPart(ship, part) {
-    part.userData.destroyed = true;
-    if (boom && boom.buffer) { boom.stop(); boom.play(); }
-    
-    // Position mondiale de la partie
-    const worldPos = part.getWorldPosition(new THREE.Vector3());
-    
-    // 1. GROSSE EXPLOSION DIRECTEMENT
-    if (typeof createRingExplosionComplete === 'function') {
-        createRingExplosionComplete(worldPos, 30);
-    } else if (typeof createStandardExplosion === 'function') {
-        createStandardExplosion(worldPos, 30);
-    }
-    
-    // 2. CHAÎNE D'EXPLOSIONS SIMPLE
-    for (let i = 0; i < 5; i++) {
-        setTimeout(() => {
-            const offset = new THREE.Vector3(
-                (Math.random() - 0.5) * 100,
-                (Math.random() - 0.5) * 100,
-                (Math.random() - 0.5) * 100
-            );
-            
-            if (typeof createStandardExplosion === 'function') {
-                createStandardExplosion(worldPos.clone().add(offset), 15);
-            }
-        }, i * 150);
-    }
-    
-    // 3. CACHER LA PARTIE
-    setTimeout(() => {
-        part.visible = false;
-    }, 200);
-    
-    // 4. VÉRIFIER SI TOUTES LES PARTIES SONT DÉTRUITES
-    setTimeout(() => {
-        const allDestroyed = ship.parts.every(p => p.userData.destroyed);
-        if (allDestroyed && typeof destroyWholeCapitalShip === 'function') {
-            destroyWholeCapitalShip(ship);
-        }
-    }, 500);
-}
-
-
-// ===================================================================
-// DESTRUCTION COMPLÈTE
-// ===================================================================
-
-function destroyWholeCapitalShip(ship) {
-    const worldPos = ship.group.getWorldPosition(new THREE.Vector3());
-    
-    // Explosion finale géante
-    createRingExplosionComplete(worldPos, 80);
-    
-    // Nuage de débris
-    for (let i = 0; i < 30; i++) {
-        setTimeout(() => {
-            const offset = new THREE.Vector3(
-                (Math.random() - 0.5) * 400,
-                (Math.random() - 0.5) * 400,
-                (Math.random() - 0.5) * 400
-            );
-            createStandardExplosion(worldPos.clone().add(offset), 30);
-        }, i * 30);
-    }
-    
-    // Supprimer le vaisseau
-    setTimeout(() => {
-        pivotRebel.remove(ship.group);
-        capitalShips = capitalShips.filter(s => s !== ship);
-    }, 2000);
-
-    // Un nouveau vaisseau sort de l'hyperespace 30 s plus tard
-    setTimeout(() => {
-        const { group, parts } = createCapitalShip(ship.group.userData.xOffset || 0);
-        pivotRebel.add(group);
-        capitalShips.push({ group, parts, hitboxes: [] });
-        fx.explosion(group.getWorldPosition(new THREE.Vector3()), 60, new THREE.Color(0.6, 0.8, 1));
-    }, 30000);
-}
-
-// ===================================================================
-// APPEL DANS L'ANIMATE
-// ===================================================================
-
-// À AJOUTER dans votre animate()
-//updateCapitalShips(dt);
-
-
-
-
-
-
-
-
+});
 
 //===================================================
 // CONTROL SCREEN
@@ -3839,41 +3856,33 @@ function updateCtrlScreenFade(dt) {
 // ===================================================
 // LOAD JSON      JSON        JSON
 // ===================================================
-function loadJSON(path){return fetch(path).then(r=>r.ok?r.json():Promise.reject("File not found "+path));}
+// Formes en binaire (x,y,z en Float32) : ~10 Mo au lieu de ~200 Mo de JSON.
+// Générées depuis les JSON d'origine par tools/holo-to-bin.mjs
+function loadShape(name) {
+    return fetch('public/holo/' + name + '.bin')
+        .then(r => r.ok ? r.arrayBuffer() : Promise.reject('File not found ' + name))
+        .then(buf => new Float32Array(buf));
+}
 
-// Deux JSON pour le battement
-Promise.all([
-    loadJSON('public/empire.json'),
-    loadJSON('public/empire.json'),
-    loadJSON('public/tiefighter.json'),
-    loadJSON('public/tieinterceptor.json'),
-    loadJSON('public/tiebomber.json'),
-    loadJSON('public/atst.json'),
-    loadJSON('public/atat.json'),
-    loadJSON('public/stardestroyer.json'),
-    loadJSON('public/deathstar.json'),
-    loadJSON('public/darkmaul.json'),
-    loadJSON('public/darkvador.json'),
-    loadJSON('public/kylo.json'),
-    loadJSON('public/galaxy.json')
+const HOLO_SHAPES = ['empire', 'tiefighter', 'tieinterceptor', 'tiebomber', 'atst', 'atat',
+                     'stardestroyer', 'deathstar', 'darkmaul', 'darkvador', 'kylo', 'galaxy'];
 
-]).then(datas => {
+Promise.all(HOLO_SHAPES.map(loadShape)).then(list => {
 
-    const shapes = datas.map(d => d.positions);
+    // l'empire deux fois de suite pour le "battement" (comme avant)
+    const shapes = [list[0], ...list];
 
-    const maxCount = Math.max(...shapes.map(s => s.length));
+    const maxCount = Math.max(...shapes.map(s => s.length / 3));
 
     const formattedShapes = shapes.map(shape => {
-
+        const count = shape.length / 3;
         const arr = new Float32Array(maxCount * 3);
-
-        for(let i=0;i<maxCount;i++){
-            const p = shape[i % shape.length];
-            arr[i*3+0] = p.x;
-            arr[i*3+1] = p.y;
-            arr[i*3+2] = p.z;
+        for (let i = 0; i < maxCount; i++) {
+            const j = (i % count) * 3;
+            arr[i*3+0] = shape[j];
+            arr[i*3+1] = shape[j + 1];
+            arr[i*3+2] = shape[j + 2];
         }
-
         return arr;
     });
 
@@ -4001,6 +4010,7 @@ particleSystem.scale.set(0.3,0.3,0.3);
 particleSystem.position.set(0,1,0);
 particleSystem.visible = true; // on le laisse visible, on contrôle juste l'opacité
 scene.add(particleSystem);
+// (pas de bloom sur l'hologramme : ses particules brillent déjà, c'était trop)
 // (la boucle animate() est déjà lancée en bas du fichier : l'appeler ici
 //  créait une 2e boucle et tout tournait deux fois par image)
 }
@@ -4220,7 +4230,7 @@ if (clickedObject.name.includes("Table_3_Button_Blue_0")) {
             }
 
         if (clickedObject.name.includes("Object_8")) {
-            playSoundSafe(R2);
+            if (droidBody) playAt(sfx.r2, droidBody.getWorldPosition(new THREE.Vector3()), 1, 0.2); else playSoundSafe(R2);
         }
 
         
@@ -4305,15 +4315,23 @@ if (clickedObject.name.includes("Side_Control_Panels_Button_White_0001")) {
             }
 
         if (clickedObject.name.includes("Object_8")) {
-            playSoundSafe(R2);
+            if (droidBody) playAt(sfx.r2, droidBody.getWorldPosition(new THREE.Vector3()), 1, 0.2); else playSoundSafe(R2);
         }
 
         
-        const shipHit = tiePlayer ? raycaster.intersectObject(tiePlayer, true) : [];
+            }
 
-        if (shipHit.length > 0) {
-            
+    // CHANGEMENT DE TIE : clic sur la console du hangar ("click here for change your TIE")
+    // ou sur le TIE lui-même. Testé à part : avant, ce test n'était fait que si le clic
+    // touchait AUSSI le décor de la passerelle, et il ignorait la console.
+    if (isInsideShip && ships.length > 1) {
+        const targets = [screenhangar, tiePlayer].filter(Boolean);
+        if (raycaster.intersectObjects(targets, true).length > 0) {
+
+            tiechange.stop();
             tiechange.play();
+            hangarConsole.flash = 1;   // flash + "bouton pressé" sur la console
+            hangarConsole.press = 1;
             // cacher le vaisseau actuel
             ships[shipIndex].visible = false;
 
@@ -4326,11 +4344,8 @@ if (clickedObject.name.includes("Side_Control_Panels_Button_White_0001")) {
 
             // mettre à jour le vaisseau actif
             tiePlayer = ships[shipIndex];
-
-            console.log("Nouveau vaisseau :", shipIndex);
         }
-            
-            }
+    }
 });
 
 // Écrans vidéo cliquables (enregistré UNE seule fois)
@@ -4402,14 +4417,14 @@ function updateCombatHud(dt) {
     if (radarTimer <= 0) {
         radarTimer = 0.1;
         const xs = enemies.filter(e => e.visible).map(e => e.position);
-        const caps = capitalShips.map(s => s.group.getWorldPosition(new THREE.Vector3()));
+        const caps = rebelFleet.positions();
         hud.drawRadar(player.position, player.rotation.y, xs, caps, hud.mode === 'flight' ? 1400 : 2200);
     }
 }
 
 
 function tryMove(moveVector) {
-    if (!collisionMeshExterior || !collisionMeshInterior) return;
+    if (!collisionMeshInterior || (!collisionMeshExterior && !exteriorColliders.length)) return;
     if (collisionShip) collisionShip.updateMatrixWorld(true);
 
     const origin = player.position.clone();
@@ -4424,26 +4439,38 @@ function tryMove(moveVector) {
         const hits = collisionRaycaster.intersectObject(collisionMeshInterior, true);
         if (hits.length > 0 && hits[0].distance < moveDistance + margin) return;
     } else {
-        const hits = collisionRaycaster.intersectObject(collisionMeshExterior, true);
+        // destroyers en orbite + croiseurs rebelles (ils bougent, eux aussi)
+        if (bounceOffMovingObstacles(origin, moveVector)) return;
+
+        // coque de l'Executor (MainHull + tourelle), sauf le tunnel de sortie du hangar.
+        // (l'ancienne cage extérieure était faite pour l'ancienne tour : plus utilisée dehors)
+        const colliders = exteriorColliders.length ? exteriorColliders : [collisionMeshExterior];
+        // on ne garde que les parois heurtées par l'EXTÉRIEUR : si on se retrouve dans une paroi,
+        // on peut toujours en ressortir (avant : bloqué à l'intérieur de la tourelle)
+        const facesRay = (h, d) => !h.face || h.face.normal.clone().transformDirection(h.object.matrixWorld).dot(d) < 0;
+        const hits = collisionRaycaster.intersectObjects(colliders, true).filter(h => !inHangarCut(h) && facesRay(h, dir));
         if (hits.length > 0 && hits[0].distance < moveDistance + margin) {
 
             // ✅ IMPACT — rebond + étincelles + son
-            const now = clock.getElapsedTime();
+            const now = performance.now() * 0.001;
             if (now - lastCollisionTime > COLLISION_COOLDOWN) {
                 lastCollisionTime = now;
 
                 // Point d'impact et normale
                 const hitPoint = hits[0].point;
                 const hitNormal = hits[0].face.normal.clone()
-                    .transformDirection(collisionMeshExterior.matrixWorld)
+                    .transformDirection(hits[0].object.matrixWorld)
                     .normalize();
+                if (hitNormal.dot(moveVector) > 0) hitNormal.negate();   // coque double face
 
                 // Étincelles
-                createCollisionSparks(hitPoint, hitNormal);
+                createCollisionSparks(hitPoint, hitNormal, moveVector);
 
                 // Rebond : réfléchit le vecteur de mouvement sur la normale
                 const reflected = moveVector.clone().reflect(hitNormal).multiplyScalar(0.4);
                 player.position.add(reflected);
+
+                cameraShake = Math.max(cameraShake, 0.8);
 
                 // Son
                 if (metalCollisionSound && metalCollisionSound.buffer && !metalCollisionSound.isPlaying) {
@@ -4456,7 +4483,7 @@ function tryMove(moveVector) {
         const backRay = new THREE.Raycaster();
         backRay.set(origin, dir.clone().negate());
         backRay.far = margin;
-        const hitsBack = backRay.intersectObject(collisionMeshExterior, true);
+        const hitsBack = backRay.intersectObjects(colliders, true).filter(h => !inHangarCut(h) && facesRay(h, dir.clone().negate()));
         if (hitsBack.length > 0) return;
     }
 
@@ -4469,6 +4496,52 @@ let pitchVelocity = 0;
 let flightRoll = 0;
 const FLIGHT_PITCH_SPEED = 1.1;   // rad/s
 const FLIGHT_PITCH_LIMIT = 1.25;  // ~70°
+
+// -------------------------------------------------------------------
+// Collisions du TIE avec ce qui bouge : destroyers en orbite (vrai maillage)
+// et croiseurs rebelles (ellipsoïdes) — même effet que sur la coque du décor
+// -------------------------------------------------------------------
+let lastFrameDt = 1 / 60;
+const PIVOT_OMEGA = -0.001 * LEGACY_TICK_RATE;   // rotation du pivot des destroyers (rad/s)
+const movingRay = new THREE.Raycaster();
+
+function bounceOffMovingObstacles(origin, moveVector) {
+    let hit = null;
+
+    for (const sd of pivot.children) {
+        const c = sd.getWorldPosition(new THREE.Vector3());
+        if (c.distanceTo(origin) > 450) continue;
+        // vitesse de la coque à cet endroit (le destroyer tourne autour du pivot)
+        const r = origin.clone().sub(pivot.position);
+        const vObs = new THREE.Vector3(PIVOT_OMEGA * r.z, 0, -PIVOT_OMEGA * r.x);
+        const rel = moveVector.clone().addScaledVector(vObs, -lastFrameDt);
+        const len = rel.length();
+        if (len < 1e-4) continue;
+        movingRay.set(origin, rel.clone().divideScalar(len));
+        movingRay.far = len + 6;
+        const h = movingRay.intersectObject(sd, true)[0];
+        if (h) {
+            const n = h.face ? h.face.normal.clone().transformDirection(h.object.matrixWorld) : rel.clone().negate().normalize();
+            if (n.dot(rel) > 0) n.negate();
+            hit = { point: h.point, normal: n, velocity: vObs };
+            break;
+        }
+    }
+    if (!hit) hit = rebelFleet.collide(origin, moveVector, 8, lastFrameDt);
+    if (!hit) return false;
+
+    const now = performance.now() * 0.001;
+    if (now - lastCollisionTime > COLLISION_COOLDOWN) {
+        lastCollisionTime = now;
+        createCollisionSparks(hit.point, hit.normal, moveVector);
+        cameraShake = Math.max(cameraShake, 0.8);
+        if (metalCollisionSound && metalCollisionSound.buffer && !metalCollisionSound.isPlaying) metalCollisionSound.play();
+    }
+    // effet repoussoir : rebond, on se dégage de la coque et on suit son mouvement
+    const reflected = moveVector.clone().reflect(hit.normal).multiplyScalar(0.4);
+    player.position.add(reflected).addScaledVector(hit.normal, 3).addScaledVector(hit.velocity, lastFrameDt);
+    return true;
+}
 
 function updateCamera(dt = 1 / LEGACY_TICK_RATE) {
     const k = dt * LEGACY_TICK_RATE;
@@ -4520,6 +4593,7 @@ window.addEventListener('resize',()=>{
     camera.aspect = window.innerWidth/window.innerHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
+    bloomComposer.setSize(window.innerWidth, window.innerHeight);
 });
 
 
@@ -4663,13 +4737,14 @@ function exitShip() {
     isInsideShip = false;
 
     if (tiePlayer) tiePlayer.visible = false;
-    if (sdt) sdt.visible = true;
     if (cockpit) cockpit.visible = true;
-    if (star_destroyer0) star_destroyer0.visible = false;
 
     switchToFlightAudio();
 
     enableFlightMode();
+
+    // pilote automatique : traversée du tunnel de la tourelle jusqu'à l'extérieur
+    startAutopilot([player.position.clone(), new THREE.Vector3(0, 3.5, -130), HANGAR_OUTSIDE.clone()], 0, 2.2);
 }
 
 function enterShip() {
@@ -4679,9 +4754,7 @@ function enterShip() {
     playerState = "flight";
 
     if (tiePlayer) tiePlayer.visible = true;
-    if (sdt) sdt.visible = false;
     if (cockpit) cockpit.visible = false;
-    if (star_destroyer0) star_destroyer0.visible = true;
 
     switchToShipAudio();
 
@@ -4743,30 +4816,154 @@ function onButtonClick() {
 
 
 
-setInterval(() => {
-    if (!battleOn()) return;
-    
-    // Vérifier les X-Wing
-    enemies.forEach(enemy => {
-        if (enemy && enemy.visible) {
-            // Si un vaisseau va dans le mauvais sens, on corrige
-            if (enemy.userData.velocity.z > 0) {
-                enemy.userData.velocity.z = -35;
-            }
-        }
-    });
-    
-    // Vérifier les TIE
-    friendlyShips.forEach(tie => {
-        if (tie && tie.visible) {
-            if (tie.userData.velocity.z > 0) {
-                tie.userData.velocity.z = -35;
-            }
-        }
-    });
-}, 3000); // Toutes les 3 secondes
 
 
+
+// =========================================================================================
+// SON SPATIALISÉ (explosions, lasers, bips du droïde)
+// =========================================================================================
+// Chaque son est joué à l'endroit où il se produit : plus fort quand c'est proche,
+// à gauche / à droite selon sa position. Petits groupes de "voix" réutilisées.
+function makePositionalPool(urls, count, volume, refDistance) {
+    const list = Array.isArray(urls) ? urls : [urls];
+    const pool = { voices: [], buffers: [], volume, next: 0, last: 0 };
+    list.forEach((url, i) => audioLoader.load(url, b => { pool.buffers[i] = b; }));
+    for (let i = 0; i < count; i++) {
+        const holder = new THREE.Object3D();
+        const voice = new THREE.PositionalAudio(listener);
+        voice.setRefDistance(refDistance);
+        voice.setRolloffFactor(1);
+        voice.setDistanceModel('inverse');
+        holder.add(voice);
+        scene.add(holder);
+        pool.voices.push({ holder, voice });
+    }
+    return pool;
+}
+
+/** Joue un son du groupe à une position (minGap : délai mini entre deux sons du groupe). */
+function playAt(pool, position, volumeMul = 1, minGap = 0.05, rate = 1) {
+    const now = performance.now() * 0.001;
+    const buffers = pool.buffers.filter(Boolean);
+    if (!buffers.length || now - pool.last < minGap) return;
+    pool.last = now;
+    const v = pool.voices[pool.next];
+    pool.next = (pool.next + 1) % pool.voices.length;
+    if (v.voice.isPlaying) v.voice.stop();
+    v.voice.setBuffer(buffers[Math.floor(Math.random() * buffers.length)]);
+    v.voice.setVolume(pool.volume * volumeMul);
+    v.voice.setPlaybackRate(rate);
+    v.holder.position.copy(position);
+    v.holder.updateMatrixWorld();
+    v.voice.play();
+}
+
+const sfx = {
+    explosion: makePositionalPool('public/explosion.mp3', 8, 1.6, 160),
+    boom:      makePositionalPool('public/boom.mp3', 4, 2.2, 400),
+    laser:     makePositionalPool('public/laser.mp3', 8, 0.5, 120),       // tirs rouges (canon, X-Wing)
+    tieLaser:  makePositionalPool('public/tielaser.mp3', 8, 0.6, 120),    // tirs verts des TIE
+    r2:        makePositionalPool(['public/R2.WAV', 'public/R2 1.WAV', 'public/R2 2.WAV', 'public/R2 3.WAV',
+                                   'public/R2 4.WAV', 'public/R2 5.WAV', 'public/R2 7.WAV', 'public/R2 8.WAV',
+                                   'public/R2 9.WAV'], 2, 1.0, 25)
+};
+
+// Toutes les explosions GLSL font maintenant du bruit, là où elles ont lieu
+const _cameraWorld = new THREE.Vector3();
+const _explosionFX = fx.explosion.bind(fx);
+fx.explosion = (pos, radius = 15, tint) => {
+    _explosionFX(pos, radius, tint);
+    camera.getWorldPosition(_cameraWorld);
+    if (pos.distanceTo(_cameraWorld) > 5000) return;
+    const vol = THREE.MathUtils.clamp(radius / 20, 0.5, 2.5);
+    if (radius >= 60) playAt(sfx.boom, pos, vol / 2, 0.25, 0.9 + Math.random() * 0.2);
+    else playAt(sfx.explosion, pos, vol, 0.06, 0.85 + Math.random() * 0.3);
+};
+
+// Tirs des vaisseaux de la bataille (limités pour ne pas saturer)
+function laserSoundAt(pos, rebel) {
+    camera.getWorldPosition(_cameraWorld);
+    if (pos.distanceTo(_cameraWorld) > 1200) return;
+    playAt(rebel ? sfx.laser : sfx.tieLaser, pos, 1, 0.12, 0.9 + Math.random() * 0.2);
+}
+
+// ---------------- Bips du droïde quand il passe près de la caméra ----------------
+let droidBody = null;
+let droidBeepCooldown = 0;
+let droidWasNear = false;
+const _droidPos = new THREE.Vector3();
+const DROID_NEAR = 60;          // distance à partir de laquelle il "parle"
+
+function updateDroidBeeps(dt) {
+    if (!droidBody || !isInsideShip) return;
+    droidBody.getWorldPosition(_droidPos);
+    camera.getWorldPosition(_cameraWorld);
+    const near = _droidPos.distanceTo(_cameraWorld) < DROID_NEAR;
+    droidBeepCooldown -= dt;
+    // un bip en arrivant près de nous, puis de temps en temps tant qu'il reste proche
+    if (near && (!droidWasNear || droidBeepCooldown <= 0) && droidBeepCooldown <= 1.5) {
+        playAt(sfx.r2, _droidPos, 1, 0.5);
+        droidBeepCooldown = 4 + Math.random() * 4;
+    }
+    droidWasNear = near;
+}
+
+// =========================================================================================
+// BLOOM (halo lumineux) — uniquement sur les objets "lumineux"
+// =========================================================================================
+// Ces objets sont aussi rendus sur le calque BLOOM_LAYER. On les dessine seuls, en
+// demi-résolution, on les floute, et on ajoute ce halo par-dessus l'image normale
+// (qui, elle, ne change pas).
+const BLOOM_LAYER = 1;
+const bloomComposer = new EffectComposer(renderer);
+bloomComposer.renderToScreen = false;
+bloomComposer.setPixelRatio(Math.min(window.devicePixelRatio, 2) * 0.5);
+bloomComposer.setSize(window.innerWidth, window.innerHeight);
+bloomComposer.addPass(new RenderPass(scene, camera));
+const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.2, 0.6, 0.0);
+bloomComposer.addPass(bloomPass);
+
+const bloomScene = new THREE.Scene();
+const bloomCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+const bloomQuad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.ShaderMaterial({
+    uniforms: { tBloom: { value: null } },
+    vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }',
+    fragmentShader: 'uniform sampler2D tBloom; varying vec2 vUv; void main(){ gl_FragColor = vec4(texture2D(tBloom, vUv).rgb, 1.0); }',
+    blending: THREE.AdditiveBlending, depthTest: false, depthWrite: false, transparent: true
+}));
+bloomQuad.frustumCulled = false;
+bloomScene.add(bloomQuad);
+
+// objets lumineux
+bolts.mesh.layers.enable(BLOOM_LAYER);
+fx.points.layers.enable(BLOOM_LAYER);
+landingBeacon.traverse(o => o.layers.enable(BLOOM_LAYER));
+ctrlPlane.layers.enable(BLOOM_LAYER);   // écran MAP holographique
+// (hyperespace, console du hangar, hologramme : volontairement SANS bloom)
+function enableBloom(root) { root.traverse(o => o.layers.enable(BLOOM_LAYER)); }
+
+function renderWithBloom() {
+    renderer.render(scene, camera);
+
+    // passe "lumineuse" : seulement le calque BLOOM, sans le fond étoilé
+    const bg = scene.background, env = scene.environment;
+    scene.background = null;
+    scene.environment = null;          // seuls les éléments émissifs doivent briller
+    // fond noir obligatoire : pendant l'hyperespace le fond est un bleu uni, et three.js
+    // gardait ce bleu comme couleur d'effacement → toute l'image était voilée de bleu
+    renderer.setClearColor(0x000000, 1);
+    camera.layers.set(BLOOM_LAYER);
+    bloomComposer.render();
+    camera.layers.set(0);
+    scene.background = bg;
+    scene.environment = env;
+
+    // halo seul (sans les objets eux-mêmes, déjà dessinés) ajouté par-dessus l'image
+    bloomQuad.material.uniforms.tBloom.value = bloomPass.renderTargetsHorizontal[0].texture;
+    renderer.autoClear = false;
+    renderer.render(bloomScene, bloomCamera);
+    renderer.autoClear = true;
+}
 
 let envBlink = 0;
 let envToggle = false;
@@ -4785,8 +4982,11 @@ function animate(){
 
     const dt = Math.min(clock.getDelta(), 0.1);  // évite un saut énorme après un changement d'onglet
     const k = dt * LEGACY_TICK_RATE;             // équivalent "nombre d'images" de l'ancienne boucle
+    lastFrameDt = dt;
 
-    if (playerState === "flight") {
+    if (autopilot.active) {
+        currentFlightSpeed = FLIGHT_CRUISE_SPEED;   // le pilote automatique gère la trajectoire
+    } else if (playerState === "flight") {
         const targetSpeed = boostHeld ? FLIGHT_BOOST_SPEED : FLIGHT_CRUISE_SPEED;
         currentFlightSpeed += (targetSpeed - currentFlightSpeed) * (1 - Math.exp(-2.5 * dt));
         // direction de la caméra
@@ -4821,7 +5021,9 @@ function animate(){
     pivot.rotation.y -= 0.001 * k; // vitesse de rotation
     material.uniforms.time.value += dt;
     material.uniforms.globalRotation.value += dt * 0.2;
-    updateCamera(dt);
+    if (autopilot.active) updateAutopilot(dt);
+    else updateCamera(dt);
+    updateLanding(dt);
     
     if (doorleft && doorright) {
 
@@ -4831,6 +5033,12 @@ function animate(){
         doorState = 1; // ouvrir
     } else {
         doorState = 0; // fermer
+    }
+
+    // pendant l'hyperespace : fond bleu nuit au lieu des étoiles (rien ne dépasse de l'écran)
+    if (screenMaterial) {
+        const bg = screenMaterial.opacity > 0.5 ? HYPERSPACE_BG : cubeTexture;
+        if (scene.background !== bg) scene.background = bg;
     }
 
     if (isPlaying && screenMaterial && video) {
@@ -4951,6 +5159,7 @@ else if (objectFade === "fadeIn") {
 
 
     updateinout();
+    updateExecutorTower();
 
     // retour à hauteur de marche une fois rentré dans le vaisseau
     if (isInsideShip) {
@@ -4960,6 +5169,8 @@ else if (objectFade === "fadeIn") {
     // ===== ARMES & EFFETS =====
     updateTurret(dt);
     updateTieGuns(dt);
+    updateHangarConsole(dt);
+    updatePatrols(dt);
 
 /*
     if (laserMixer) {
@@ -5022,6 +5233,7 @@ if (!alarmActive) {
 
 
   // Mettre à jour les X-Wing seulement s'ils existent
+    updateBattleWaves(dt);
     if (enemies.length > 0) {
         updateEnemies(dt);
     }
@@ -5033,7 +5245,8 @@ if (!alarmActive) {
     if (tieModel && friendlyShips.length > 0) {
         updateCombat(dt);
     }
-    updateCapitalShips(dt);
+    rebelFleet.update(dt);
+    debris.update(dt);
 
     bolts.update(dt);
     fx.update(dt, camera, renderer);
@@ -5058,10 +5271,11 @@ if (!alarmActive) {
     checkZones();
     
 
-    renderer.render(scene,camera);
+    updateDroidBeeps(dt);
+
+    renderWithBloom();
 
 }
 
 // Démarrer l'animation
 requestAnimationFrame(animate);
-

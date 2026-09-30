@@ -398,6 +398,33 @@ export class ExplosionFX {
     }
 
     /** Flash de bouche de canon. */
+    /** Flash (sortie d'hyperespace…). */
+    flash(pos, size, color = new THREE.Color(0.7, 0.85, 1), life = 0.5) {
+        this.emit(pos, _tmp.set(0, 0, 0), life, size, size * 2.5, color, 2);
+    }
+
+    /** Traînée incandescente (matière en fusion qui s'échappe d'une coque coupée). */
+    trail(pos, vel, size) {
+        this.emit(pos, vel, 1.6 + Math.random() * 1.2, size * 0.5, size * 1.8, new THREE.Color(1, 0.55, 0.2), 0, 0.35);
+        if (Math.random() < 0.35) {
+            const v = vel.clone().multiplyScalar(1.6).add(new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).multiplyScalar(size * 3));
+            this.emit(pos, v, 0.9 + Math.random() * 0.6, size * 0.12, size * 0.04, new THREE.Color(1, 0.75, 0.35), 1, 0.4);
+        }
+    }
+
+    /** Petit foyer d'incendie qui brûle sur une coque. */
+    fire(pos, size, baseVel = null) {
+        const v = new THREE.Vector3();
+        this._randDir(v).multiplyScalar(size * 0.8);
+        if (baseVel) v.add(baseVel);
+        this.emit(pos, v, 0.6 + Math.random() * 0.5, size * 0.6, size * 1.4, new THREE.Color(1, 0.6, 0.3), 0, 1.0);
+        if (Math.random() < 0.5) {
+            this._randDir(v).multiplyScalar(size * 5);
+            if (baseVel) v.add(baseVel);
+            this.emit(pos, v, 0.5, size * 0.15, size * 0.05, new THREE.Color(1, 0.7, 0.3), 1, 1.5);
+        }
+    }
+
     muzzle(pos, color = LASER_GREEN, size = 3) {
         this.emit(pos, _tmp.set(0, 0, 0), 0.08, size, size * 1.6, color, 2);
     }
@@ -483,7 +510,7 @@ export class CombatHUD {
 
     setScore(n) {
         this.kills = n;
-        this.score.textContent = `x-wing : ${n}`;
+        this.score.textContent = `rebelles : ${n}`;
     }
 
     showLock(x, y, visible) {
@@ -528,4 +555,203 @@ export class CombatHUD {
         c.fillStyle = '#7dff8a';
         c.beginPath(); c.moveTo(R, R - 7); c.lineTo(R - 5, R + 5); c.lineTo(R + 5, R + 5); c.closePath(); c.fill();
     }
+}
+
+// ===================================================================
+// DÉBRIS (éclats de coque) — un seul draw call pour tous
+// ===================================================================
+function makeShardGeometry() {
+    const g = new THREE.IcosahedronGeometry(1, 0);
+    const pos = g.getAttribute('position');
+    const offsets = new Map();
+    for (let i = 0; i < pos.count; i++) {
+        const key = `${pos.getX(i).toFixed(3)},${pos.getY(i).toFixed(3)},${pos.getZ(i).toFixed(3)}`;
+        if (!offsets.has(key)) offsets.set(key, 0.55 + Math.random() * 0.7);
+        const f = offsets.get(key);
+        // éclat plat et irrégulier (morceau de plaque de blindage)
+        pos.setXYZ(i, pos.getX(i) * f * 1.3, pos.getY(i) * f * 0.35, pos.getZ(i) * f);
+    }
+    g.computeVertexNormals();
+    return g;
+}
+
+export class DebrisField {
+
+    constructor(scene, fx, max = 700) {
+        this.fx = fx;
+        this.max = max;
+        this.items = [];
+        const material = new THREE.MeshStandardMaterial({ color: 0xffffff, metalness: 0.5, roughness: 0.7, flatShading: true });
+        this.mesh = new THREE.InstancedMesh(makeShardGeometry(), material, max);
+        this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+        this.mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(max * 3), 3);
+        this.mesh.count = 0;
+        this.mesh.frustumCulled = false;
+        scene.add(this.mesh);
+        this._m = new THREE.Matrix4();
+        this._s = new THREE.Vector3();
+    }
+
+    /**
+     * pos : origine, count : nombre d'éclats
+     * opts : { dir (direction privilégiée), speed:[min,max], size:[min,max], life:[min,max], baseVel, hot (0..1) }
+     */
+    spawn(pos, count, opts = {}) {
+        const speed = opts.speed || [15, 50];
+        const size = opts.size || [1.5, 5];
+        const life = opts.life || [4, 8];
+        const hot = opts.hot ?? 0.5;
+        const v = new THREE.Vector3();
+        for (let i = 0; i < count; i++) {
+            if (this.items.length >= this.max) this.items.shift();
+            const u = Math.random() * 2 - 1, th = Math.random() * Math.PI * 2, s = Math.sqrt(1 - u * u);
+            v.set(s * Math.cos(th), u, s * Math.sin(th));
+            if (opts.dir) v.multiplyScalar(0.6).add(opts.dir).normalize();
+            v.multiplyScalar(speed[0] + Math.random() * (speed[1] - speed[0]));
+            if (opts.baseVel) v.add(opts.baseVel);
+            const l = life[0] + Math.random() * (life[1] - life[0]);
+            const shade = 0.25 + Math.random() * 0.45;
+            this.items.push({
+                pos: pos.clone(),
+                vel: v.clone(),
+                quat: new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.random() * 6, Math.random() * 6, Math.random() * 6)),
+                spin: new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize(),
+                spinSpeed: 0.5 + Math.random() * 3,
+                size: size[0] + Math.random() * (size[1] - size[0]),
+                life: l, maxLife: l,
+                hot: Math.random() < hot ? 0.6 + Math.random() * 1.2 : 0,
+                trail: 0,
+                color: new THREE.Color(shade, shade * 0.97, shade * 0.93)
+            });
+        }
+    }
+
+    update(dt) {
+        const dq = new THREE.Quaternion();
+        let n = 0;
+        this.items = this.items.filter(d => {
+            d.life -= dt;
+            if (d.life <= 0) return false;
+            d.pos.addScaledVector(d.vel, dt);
+            dq.setFromAxisAngle(d.spin, d.spinSpeed * dt);
+            d.quat.multiply(dq);
+
+            // les éclats encore brûlants laissent une traînée de feu
+            if (d.hot > 0) {
+                d.hot -= dt;
+                d.trail -= dt;
+                if (d.trail <= 0) {
+                    d.trail = 0.07;
+                    this.fx.emit(d.pos, _tmp.set(0, 0, 0), 0.5, d.size * 0.6, d.size * 1.5, new THREE.Color(1, 0.55, 0.25), 0, 1);
+                }
+            }
+
+            const shrink = Math.min(1, d.life / 1.2);
+            this._s.setScalar(d.size * shrink);
+            this._m.compose(d.pos, d.quat, this._s);
+            this.mesh.setMatrixAt(n, this._m);
+            this.mesh.setColorAt(n, d.color);
+            n++;
+            return true;
+        });
+        this.mesh.count = n;
+        this.mesh.instanceMatrix.needsUpdate = true;
+        if (this.mesh.instanceColor) this.mesh.instanceColor.needsUpdate = true;
+    }
+}
+
+// ===================================================================
+// TROUS DANS LA COQUE (shader)
+// ===================================================================
+// Chaque impact ajoute une sphère de dégâts (dans le repère du maillage).
+// Dans ces sphères, les faces AVANT sont supprimées (discard) : on voit
+// alors les faces ARRIÈRE de la coque, rendues sombres avec des braises,
+// ce qui donne l'illusion d'un trou avec de la profondeur.
+// Autour du trou : métal brûlé + liseré incandescent qui scintille.
+export const hullTime = { value: 0 };
+const MAX_HOLES = 8;
+
+export function makeDamageable(root) {
+    const targets = [];
+    root.traverse(mesh => {
+        if (!mesh.isMesh) return;
+        const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+        const cloned = mats.map(m => {
+            const mat = m.clone();
+            if (mat.transparent) return mat;          // vitres / champs de force : pas de trous
+            const u = {
+                uDmg: { value: Array.from({ length: MAX_HOLES }, () => new THREE.Vector4(0, 0, 0, 1)) },
+                uDmgCount: { value: 0 },
+                uTime: hullTime
+            };
+            mat.side = THREE.DoubleSide;
+            mat.onBeforeCompile = (shader) => {
+                Object.assign(shader.uniforms, u);
+                shader.vertexShader = shader.vertexShader
+                    .replace('#include <common>', '#include <common>\nvarying vec3 vDmgPos;')
+                    .replace('#include <begin_vertex>', '#include <begin_vertex>\nvDmgPos = transformed;');
+                shader.fragmentShader = shader.fragmentShader
+                    .replace('#include <common>', `#include <common>
+                        varying vec3 vDmgPos;
+                        uniform vec4 uDmg[${MAX_HOLES}];
+                        uniform int uDmgCount;
+                        uniform float uTime;`)
+                    .replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>
+                        float dmgD = 10.0;
+                        for (int i = 0; i < ${MAX_HOLES}; i++) {
+                            if (i >= uDmgCount) break;
+                            vec3 q = (vDmgPos - uDmg[i].xyz) / uDmg[i].w;
+                            float edge = sin(q.x * 5.1) * sin(q.y * 4.3) * sin(q.z * 5.7);   // bord déchiqueté
+                            dmgD = min(dmgD, length(q) + edge * 0.18);
+                        }
+                        if (gl_FrontFacing && dmgD < 1.0) discard;`)
+                    .replace('#include <dithering_fragment>', `#include <dithering_fragment>
+                        if (uDmgCount > 0) {
+                            float flick = 0.7 + 0.3 * sin(uTime * 7.0 + vDmgPos.x * 0.3 + vDmgPos.z * 0.2);
+                            if (!gl_FrontFacing) {
+                                // intérieur du vaisseau vu à travers le trou : sombre,
+                                // quelques braises seulement près du bord déchiré
+                                float rim = smoothstep(0.55, 1.0, dmgD) * smoothstep(1.6, 1.0, dmgD);
+                                float deep = 1.0 - smoothstep(0.0, 1.2, dmgD);
+                                gl_FragColor.rgb = gl_FragColor.rgb * 0.06
+                                    + vec3(1.0, 0.3, 0.05) * rim * flick * 0.45
+                                    + vec3(0.25, 0.04, 0.0) * deep * flick * 0.25;
+                            } else if (dmgD < 1.7) {
+                                float burn = smoothstep(1.7, 1.0, dmgD);
+                                gl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(0.04, 0.035, 0.03), burn * 0.85);
+                                float glow = smoothstep(1.28, 1.0, dmgD) * flick;
+                                gl_FragColor.rgb += vec3(1.4, 0.5, 0.08) * glow;
+                            }
+                        }`);
+            };
+            mat.customProgramCacheKey = () => 'hull-damage';
+            targets.push({ mesh, u });
+            return mat;
+        });
+        mesh.material = Array.isArray(mesh.material) ? cloned : cloned[0];
+    });
+
+    return {
+        /** Ajoute un trou (point et rayon en coordonnées monde). */
+        addHole(worldPoint, worldRadius) {
+            for (const t of targets) {
+                t.mesh.updateMatrixWorld();
+                const local = t.mesh.worldToLocal(worldPoint.clone());
+                const r = worldRadius / t.mesh.matrixWorld.getMaxScaleOnAxis();
+                const list = t.u.uDmg.value;
+                const count = t.u.uDmgCount.value;
+                // si un trou existe déjà tout près, on l'agrandit plutôt que d'en créer un nouveau
+                let merged = false;
+                for (let i = 0; i < count; i++) {
+                    const h = list[i];
+                    const d = Math.hypot(h.x - local.x, h.y - local.y, h.z - local.z);
+                    if (d < h.w * 0.7) { h.w = Math.min(h.w * 1.1 + r * 0.12, r * 2.2); merged = true; break; }
+                }
+                if (merged) continue;
+                const slot = count < MAX_HOLES ? count : Math.floor(Math.random() * MAX_HOLES);
+                list[slot].set(local.x, local.y, local.z, r);
+                t.u.uDmgCount.value = Math.min(MAX_HOLES, count + 1);
+            }
+        }
+    };
 }
