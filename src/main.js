@@ -1,15 +1,13 @@
 import * as THREE from 'three'
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
-import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
-import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
-import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
-import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js';
-import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js'; // même three.js que le reste (importmap en ligne, node_modules avec Vite)
 import { LaserBolts, ExplosionFX, CombatHUD, DebrisField, InstancedShips, segmentSphere, LASER_GREEN, LASER_RED } from './weapons.js';
 import { RebelFleet } from './fleet.js';
+import { LEGACY_TICK_RATE, FLIGHT_CRUISE_SPEED, FLIGHT_BOOST_SPEED, BATTLE_Y, BATTLE_MIN_Z } from './core/constants.js';
+import { loadingManager, makeGLTFLoader, initLoadingScreen } from './core/loaders.js';
+import { createStage, handleResize } from './core/stage.js';
+import { createSkybox, HYPERSPACE_BG } from './core/skybox.js';
+import { createBloom, BLOOM_LAYER, enableBloom } from './core/bloom.js';
 
-let scene, camera, renderer;
 let particleSystem, material;
 let mouse = new THREE.Vector3();
 let mouseSmooth = new THREE.Vector3();
@@ -61,15 +59,7 @@ let ctrlScreenVisible = false;
 let ctrlScreenFadeDirection = 0; // 1 = fade in, -1 = fade out
 const ctrlScreenFadeSpeed = 1.5;
 const screenGeometry = new THREE.PlaneGeometry(16, 9); // format 16:9
-const loadingManager = new THREE.LoadingManager();
 
-// Les modèles sont compressés (meshopt, voir tools/optimize-assets.mjs) :
-// chaque chargeur doit connaître le décodeur.
-function makeGLTFLoader() {
-    const loader = new GLTFLoader(loadingManager);
-    loader.setMeshoptDecoder(MeshoptDecoder);
-    return loader;
-}
 let panelMesh;
 
 let blinkTime = 0;
@@ -84,8 +74,6 @@ let hyperscreen;
 let screenMaterial;
 let originalPositions = new Map();
 const hyperMoveDistance = 200;
-let mainHDRI;
-let alarmHDR;
 let rotationVelocity = 0;
 const rotationAcceleration = 0.2;
 const rotationDamping = 0.85;
@@ -114,13 +102,6 @@ let xwingModel = null;      // Modèle X-Wing
 let enemyLasers = [];       // Lasers rouges (X-Wing)
 let friendlyLasers = [];    // Lasers verts (TIE)
 let explosions = [];                    // Explosions vidéo
-// La boucle d'animation tournait 2 fois par image (≈120 fois/s sur un écran 60 Hz).
-// Les vitesses "par image" réglées à l'époque sont conservées via ce facteur.
-const LEGACY_TICK_RATE = 120;
-const FLIGHT_CRUISE_SPEED = 50;   // vitesse du TIE en vol (unités/s)
-const FLIGHT_BOOST_SPEED = 700;   // avec MAJ (Shift) maintenue (l'Executor fait ~26 000 unités de long)
-const BATTLE_Y = 250;             // altitude moyenne de la bataille (au-dessus de la coque de l'Executor, y ≈ -80)
-const BATTLE_MIN_Z = 260;         // la bataille reste devant la passerelle (vitres ≈ z 150, canon z 190)
 const listener = new THREE.AudioListener();
 let collisionMeshInterior;
 let collisionMeshExterior;
@@ -157,24 +138,10 @@ videoTexture.flipY = false;
 
 
 
-loadingManager.onLoad = function() {
-
-    const loadingScreen = document.getElementById("loadingScreen");
-
-    loadingScreen.style.opacity = 0;
-
-    setTimeout(() => {
-        loadingScreen.style.display = "none";
-        document.getElementById("playButton").style.display = "block";
-    }, 1000);
-};
-
-const playButton = document.getElementById("playButton");
-
-playButton.addEventListener("click", () => {
+initLoadingScreen(() => {
 
     // débloque le contexte audio
-    
+
     camera.add(listener);
 
     if (ambientSound && ambientSound.buffer) {
@@ -182,7 +149,6 @@ playButton.addEventListener("click", () => {
         ambientStarted = true;
     }
     open.play();
-    playButton.style.display = "none";
 });
 
 
@@ -190,53 +156,7 @@ playButton.addEventListener("click", () => {
 // ==================
 // SCÈNE & CAMERA
 // ==================
-scene = new THREE.Scene();
-scene.background = new THREE.Color(0x000000);
-
-// far = 50000 : l'Executor mesure ~26 000 unités, sa proue était coupée à 20 000
-camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 50000);
-camera.position.set(0,0,0);
-camera.rotation.order = "YXZ";
-
-
-
-// Renderer
-renderer = new THREE.WebGLRenderer({antialias:true});
-renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.setPixelRatio(window.devicePixelRatio);
-renderer.outputColorSpace = THREE.SRGBColorSpace;
-renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 0.3;
-document.body.appendChild(renderer.domElement);
-
-
-const hdrloader = new RGBELoader().setDataType(THREE.FloatType);
-
-hdrloader.load("studio.hdr", (texture) => {
-
-    const pmremGenerator = new THREE.PMREMGenerator(renderer);
-    mainHDRI = pmremGenerator.fromEquirectangular(texture).texture;
-
-    scene.environment = mainHDRI;
-
-    texture.dispose();
-    pmremGenerator.dispose();
-
-});
-
-hdrloader.load('public/studio2.hdr', function(texture) {
-
-    texture.mapping = THREE.EquirectangularReflectionMapping;
-    alarmHDR = texture;
-
-});
-
-
-
-// Lumière
-scene.add(new THREE.AmbientLight(0xffffff, 0.8));
-const hemiLight = new THREE.HemisphereLight(0xffffff, 0x000000, 0.9);
-scene.add(hemiLight);
+const { scene, camera, renderer, env } = createStage();
 
 // AMBIANCE SOUND
 
@@ -475,52 +395,7 @@ function playSoundSafe(sound) {
 // ==================
 // SKYBOX
 // ==================
-const loader = new THREE.CubeTextureLoader();
-const cubeTexture = loader.load([
-    './public/env8/px.jpg','./public/env8/nx.jpg',
-    './public/env8/py.jpg','./public/env8/ny.jpg',
-    './public/env8/pz.jpg','./public/env8/nz.jpg'
-]);
-cubeTexture.colorSpace = THREE.SRGBColorSpace;
-// Fond étoilé qui tourne TRÈS lentement. three.js 0.160 ne sait pas faire tourner
-// scene.background : on dessine donc un petit cube autour de la caméra, en premier,
-// avec la même image. Coût : 1 seul appel de dessin.
-scene.background = null;
-const SKY_SPEED = 0.003;   // rad/s → un tour complet en ~35 min
-const skybox = new THREE.Mesh(
-    new THREE.BoxGeometry(1, 1, 1),
-    new THREE.ShaderMaterial({
-        uniforms: { envMap: { value: cubeTexture } },
-        vertexShader: /* glsl */`
-            varying vec3 vDir;
-            void main() {
-                vDir = position;   // direction dans le repère du ciel (qui tourne)
-                // seulement les ROTATIONS (caméra et ciel), jamais la position : le ciel est
-                // "à l'infini" et ne tremble plus quand la caméra est secouée par un tir
-                vec3 p = mat3(viewMatrix) * (mat3(modelMatrix) * position);
-                gl_Position = projectionMatrix * vec4(p, 1.0);
-            }`,
-        fragmentShader: /* glsl */`
-            uniform samplerCube envMap;
-            varying vec3 vDir;
-            void main() {
-                gl_FragColor = textureCube(envMap, vec3(-vDir.x, vDir.y, vDir.z));
-                #include <colorspace_fragment>
-            }`,
-        side: THREE.BackSide,
-        depthTest: false,
-        depthWrite: false
-    })
-);
-skybox.renderOrder = -1000;        // dessiné avant tout le reste
-skybox.frustumCulled = false;
-skybox.rotation.x = 0.25;          // axe de rotation légèrement incliné
-scene.add(skybox);
-
-function updateSkybox(dt) {
-    skybox.rotation.y += SKY_SPEED * dt;
-}
-const HYPERSPACE_BG = new THREE.Color(0x0b2a66);   // fond pendant l'hyperespace (bleu du tunnel)
+const sky = createSkybox(scene);
 
 // ==================
 // LOAD GLB MODEL
@@ -2490,8 +2365,8 @@ function stopAlarm() {
         alarmSound.stop();
     }
 
-    if (mainHDRI) {
-        scene.environment = mainHDRI;
+    if (env.main) {
+        scene.environment = env.main;
     }
 
     if (panelMesh) {
@@ -4700,13 +4575,7 @@ function updateCamera(dt = 1 / LEGACY_TICK_RATE) {
 // ==================
 // RESIZE
 // ==================
-window.addEventListener('resize',()=>{
-    camera.aspect = window.innerWidth/window.innerHeight;
-    camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    bloomComposer.setSize(window.innerWidth, window.innerHeight);
-});
-
+handleResize(camera, renderer, (w, h) => bloom.setSize(w, h));
 
     let mouseX = 0;
     let mouseY = 0;
@@ -5025,25 +4894,7 @@ function updateDroidBeeps(dt) {
 // Ces objets sont aussi rendus sur le calque BLOOM_LAYER. On les dessine seuls, en
 // demi-résolution, on les floute, et on ajoute ce halo par-dessus l'image normale
 // (qui, elle, ne change pas).
-const BLOOM_LAYER = 1;
-const bloomComposer = new EffectComposer(renderer);
-bloomComposer.renderToScreen = false;
-bloomComposer.setPixelRatio(Math.min(window.devicePixelRatio, 2) * 0.5);
-bloomComposer.setSize(window.innerWidth, window.innerHeight);
-bloomComposer.addPass(new RenderPass(scene, camera));
-const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.2, 0.6, 0.0);
-bloomComposer.addPass(bloomPass);
-
-const bloomScene = new THREE.Scene();
-const bloomCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
-const bloomQuad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.ShaderMaterial({
-    uniforms: { tBloom: { value: null } },
-    vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }',
-    fragmentShader: 'uniform sampler2D tBloom; varying vec2 vUv; void main(){ gl_FragColor = vec4(texture2D(tBloom, vUv).rgb, 1.0); }',
-    blending: THREE.AdditiveBlending, depthTest: false, depthWrite: false, transparent: true
-}));
-bloomQuad.frustumCulled = false;
-bloomScene.add(bloomQuad);
+const bloom = createBloom(scene, camera, renderer);
 
 // objets lumineux
 bolts.mesh.layers.enable(BLOOM_LAYER);
@@ -5051,30 +4902,7 @@ fx.points.layers.enable(BLOOM_LAYER);
 landingBeacon.traverse(o => o.layers.enable(BLOOM_LAYER));
 ctrlPlane.layers.enable(BLOOM_LAYER);   // écran MAP holographique
 // (hyperespace, console du hangar, hologramme : volontairement SANS bloom)
-function enableBloom(root) { root.traverse(o => o.layers.enable(BLOOM_LAYER)); }
 
-function renderWithBloom() {
-    renderer.render(scene, camera);
-
-    // passe "lumineuse" : seulement le calque BLOOM, sans le fond étoilé
-    const bg = scene.background, env = scene.environment;
-    scene.background = null;
-    scene.environment = null;          // seuls les éléments émissifs doivent briller
-    // fond noir obligatoire : pendant l'hyperespace le fond est un bleu uni, et three.js
-    // gardait ce bleu comme couleur d'effacement → toute l'image était voilée de bleu
-    renderer.setClearColor(0x000000, 1);
-    camera.layers.set(BLOOM_LAYER);
-    bloomComposer.render();
-    camera.layers.set(0);
-    scene.background = bg;
-    scene.environment = env;
-
-    // halo seul (sans les objets eux-mêmes, déjà dessinés) ajouté par-dessus l'image
-    bloomQuad.material.uniforms.tBloom.value = bloomPass.renderTargetsHorizontal[0].texture;
-    renderer.autoClear = false;
-    renderer.render(bloomScene, bloomCamera);
-    renderer.autoClear = true;
-}
 
 // =========================================================================================
 // VOLUME — petit bouton discret en haut à gauche
@@ -5211,7 +5039,7 @@ function animate(){
     if (screenMaterial) {
         const hyper = screenMaterial.opacity > 0.5;
         scene.background = hyper ? HYPERSPACE_BG : null;
-        skybox.visible = !hyper;
+        sky.mesh.visible = !hyper;
     }
 
     if (isPlaying && screenMaterial && video) {
@@ -5344,7 +5172,7 @@ else if (objectFade === "fadeIn") {
     updateTieGuns(dt);
     updateHangarConsole(dt);
     updatePatrols(dt);
-    updateSkybox(dt);
+    sky.update(dt);
 
 /*
     if (laserMixer) {
@@ -5379,12 +5207,12 @@ if (newToggle !== envToggle) {
 
     envToggle = newToggle;
 
-    scene.environment = envToggle ? alarmHDR : mainHDRI;
+    scene.environment = envToggle ? env.alarm : env.main;
 }}
 
 if (!alarmActive) {
 
-    scene.environment = mainHDRI;
+    scene.environment = env.main;
     renderer.toneMappingExposure = 0.3;
 }
 
@@ -5448,7 +5276,7 @@ if (!alarmActive) {
 
     updateDroidBeeps(dt);
 
-    renderWithBloom();
+    bloom.render();
 
 }
 
