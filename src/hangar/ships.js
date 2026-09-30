@@ -21,7 +21,6 @@ export function initHangarShips(ctx) {
     function checkGameReady() {
         if (tieLoaded && cockpitLoaded) {
             gameReady = true;
-            console.log("GAME READY");
         }
     }
 

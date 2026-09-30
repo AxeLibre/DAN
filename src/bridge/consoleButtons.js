@@ -43,7 +43,6 @@ export function initConsoleButtons(ctx) {
     // Variables pour l'animation du chenillard
     let chaseTime = 0;
     let chaseActive = false;
-    const chaseSpeed = 0.2; // Vitesse de changement (secondes entre chaque bouton)
 
     // Fonction pour initialiser les couleurs des boutons
     function initButtonColors() {
@@ -74,17 +73,6 @@ export function initConsoleButtons(ctx) {
                 mesh.material.emissiveIntensity = 0.2;
             }
         });
-    }
-
-    // Allumer un bouton spécifique
-    function lightUpButton(index, intensity = 2.0) {
-        if (!Table_3_Button_Red_0 || !Table_3_Button_Red_0.userData.buttonMeshes) return;
-
-        const meshes = Table_3_Button_Red_0.userData.buttonMeshes;
-        if (index >= 0 && index < meshes.length) {
-            meshes[index].material.emissive.setHSL(0.02, 1, 0.5); // Orange vif
-            meshes[index].material.emissiveIntensity = intensity;
-        }
     }
 
     // Animation du chenillard
@@ -256,63 +244,7 @@ export function initConsoleButtons(ctx) {
             }
         });
 
-        console.log(`✨ ${whiteButtons.length} boutons blancs chargés (gris foncé)`);
     });
-
-    function updateWhiteButtonsContrast(dt) {
-        if (!whiteButtons.length) return;
-
-        whiteButtons.forEach((button, index) => {
-            const state = buttonStates[index];
-            if (!state || !button.material) return;
-
-            // Met à jour le minuteur
-            state.nextChange -= dt;
-
-            if (state.nextChange <= 0) {
-                // 70% de chance de s'allumer
-                if (Math.random() < 0.7) {
-                    state.targetIntensity = 3.0 + Math.random() * 3.0; // Lumineux (3-6)
-                } else {
-                    state.targetIntensity = 0.25 + Math.random() * 0.3; // Gris foncé (0.25-0.55)
-                }
-
-                // Prochain changement
-                state.nextChange = 0.4 + Math.random() * 2.6;
-                state.blinkSpeed = 3 + Math.random() * 5;
-            }
-
-            // Transition
-            state.intensity += (state.targetIntensity - state.intensity) * state.blinkSpeed * dt;
-
-            // Micro-fluctuation
-            const flicker = Math.sin(performance.now() * 0.02 + index) * 0.1;
-            let finalIntensity = state.intensity + flicker;
-
-            // Maintient dans des plages contrastées mais pas extrêmes
-            if (state.targetIntensity < 0.6) {
-                // Mode "éteint" : entre 0.2 et 0.6
-                finalIntensity = Math.max(0.2, Math.min(0.6, finalIntensity));
-            } else {
-                // Mode "allumé" : entre 2.5 et 7
-                finalIntensity = Math.max(2.5, Math.min(7, finalIntensity));
-            }
-
-            // Applique
-            if (button.material.emissive) {
-                button.material.emissiveIntensity = finalIntensity;
-
-                // Couleur selon l'état
-                if (finalIntensity > 1.5) {
-                    // Allumé : blanc légèrement bleuté
-                    button.material.emissive.setHSL(0.58, 0.4, 0.5);
-                } else {
-                    // Éteint : gris foncé
-                    button.material.emissive.setHSL(0, 0, 0.15 + finalIntensity * 0.1);
-                }
-            }
-        });
-    }
 
     // Version avec plus de nuances (pour un effet encore plus réaliste)
     function updateWhiteButtonsNuanced(dt) {

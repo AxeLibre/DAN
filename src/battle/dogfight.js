@@ -26,14 +26,9 @@ export function initDogfight(ctx) {
     // 2. FONCTION D'EXPLOSION RAPIDE (si elle n'existe pas)
     // -------------------------------------------------------------------
 
-    // Si tu n'as pas createQuickExplosion, on utilise createStandardExplosion
+    // petite explosion (même taille qu'avant : createStandardExplosion × 1.1)
     function createQuickExplosion(position, scale = 8) {
-        // Utilise ton système d'explosion existant
-        if (typeof battle.createStandardExplosion === 'function') {
-            battle.createStandardExplosion(position, scale);
-        } else if (typeof battle.createVideoExplosion === 'function') {
-            battle.createVideoExplosion(position, scale);
-        }
+        battle.fx.explosion(position, scale * 1.1);
     }
 
     // -------------------------------------------------------------------

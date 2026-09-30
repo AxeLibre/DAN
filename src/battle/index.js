@@ -7,7 +7,6 @@ import { initImperials } from './imperials.js';
 import { initDogfight } from './dogfight.js';
 import { initCapitalShips } from './capitalShips.js';
 import { initBattleHud } from './hud.js';
-import { initLegacyExplosions } from './legacyExplosions.js';
 
 // ===================================================================
 // BATAILLE SPATIALE : armes du joueur, chasseurs, croiseurs, HUD
@@ -88,7 +87,6 @@ export function initBattle(ctx) {
 
     battle.weapons = initPlayerWeapons(ctx);
     Object.assign(battle, initRebels(ctx));
-    Object.assign(battle, initLegacyExplosions(ctx));
     Object.assign(battle, initImperials(ctx));
     Object.assign(battle, initDogfight(ctx));
     battle.fleet = initCapitalShips(ctx);
@@ -119,9 +117,6 @@ export function initBattle(ctx) {
         if (battle.enemies.length > 0) {
             battle.updateEnemies(dt);
         }
-
-        // Mettre à jour les explosions
-        battle.updateExplosions(dt);
 
         // Mettre à jour les TIE seulement s'ils existent
         if (battle.tiesReady() && battle.friendlyShips.length > 0) {

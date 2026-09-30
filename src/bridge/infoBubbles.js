@@ -64,7 +64,6 @@ export function loadStarJediFont() {
 
     starJediFont.load().then(function(font){
         document.fonts.add(font);
-        console.log("StarJedi chargée");
     });
 }
 

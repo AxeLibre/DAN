@@ -1,5 +1,4 @@
-import * as THREE from 'three'
-import { makeGLTFLoader, initLoadingScreen } from './core/loaders.js';
+import { initLoadingScreen } from './core/loaders.js';
 import { createContext } from './core/context.js';
 import { handleResize } from './core/stage.js';
 import { createSkybox } from './core/skybox.js';
@@ -32,33 +31,6 @@ import { initPlayer } from './player.js';
 // Ici, on crée le contexte partagé (ctx), on initialise les modules dans l'ordre, puis
 // on lance la boucle d'animation (core/loop.js).
 
-// ---- anciennes variables, inutilisées ----
-let mouseSmooth = new THREE.Vector3();
-let plane = new THREE.Plane(new THREE.Vector3(0,0,1),0);
-let controls;
-let flightControls;
-let sdt;
-const flightSpeed = 1; // 🚀 plus rapide
-const maxFlightSpeed = 1;
-const acceleration = 0.05;
-let poweroff;
-let originalPositions = new Map();
-let lasers = [];
-let cannonTargetY = -20;
-let cannonHiddenY = -20;
-let cannonVisibleY = 0;
-let cannonSpeed = 0.5;
-let ignoreNextShot = false;
-let enemyLasers = [];       // Lasers rouges (X-Wing)
-let friendlyLasers = [];    // Lasers verts (TIE)
-let mixer;
-const moveSpeed = 0.5;
-const rotationSpeed = 0.02;
-let mouseX = 0;
-let mouseY = 0;
-// ------------------------------------------
-
-
 loadStarJediFont();   // police des bulles d'info (voir src/bridge/infoBubbles.js)
 
 initLoadingScreen(() => ctx.audio.unlock());   // clic sur PLAY : débloque le son
@@ -72,9 +44,6 @@ ctx.audio = initAudio(scene, camera);
 
 // Fond étoilé
 ctx.sky = createSkybox(scene);
-
-const hologramGroup = new THREE.Group();   // HOLOGRAM (inutilisé)
-scene.add(hologramGroup);
 
 // Destroyers en orbite, Executor vu de dehors
 ctx.destroyers = initDestroyers(ctx);
@@ -95,32 +64,6 @@ ctx.alarm = initAlarm(ctx);
 ctx.ships = initHangarShips(ctx);
 ctx.hangarConsole = initHangarConsole(ctx);
 ctx.landing = initLanding(ctx);
-
-/*
-// ==========================================================
-// LASER
-// ==========================================================
-// 🔥 LASER GLB
-const laserLoader = makeGLTFLoader();
-
-let laserMixer;
-let laserAction;
-
-laserLoader.load('public/laser.glb', (gltf) => {
-
-    const laser = gltf.scene;
-    laser.position.set(0,-12, 98.5);
-    laser.scale.set(10,10,10);
-    laser.rotation.y = Math.PI; // faire face à la caméra
-    scene.add(laser);
-
-    laserMixer = new THREE.AnimationMixer(laser);
-    laserAction = laserMixer.clipAction(gltf.animations[0]);
-
-    laserAction.setLoop(THREE.LoopOnce);
-    laserAction.clampWhenFinished = true;
-});
-*/
 
 // Bataille spatiale (voir src/battle/)
 ctx.battle = initBattle(ctx);

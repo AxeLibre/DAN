@@ -40,7 +40,6 @@ export function initPlayerWeapons(ctx) {
         cooldown: 0, recoilT: 1,
         lock: null
     };
-    let laserCannon; // racine de la tourelle (nom gardé de l'ancienne version)
 
     makeGLTFLoader().load('public/laser_cannon.glb', (gltf) => {
         const model = gltf.scene;
@@ -68,7 +67,6 @@ export function initPlayerWeapons(ctx) {
         scene.add(root);
 
         Object.assign(turret, { root, yaw, pitch, recoil });
-        laserCannon = root;
     });
 
     function setTurret(on) {

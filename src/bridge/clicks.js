@@ -21,7 +21,6 @@ export function initClicks(ctx) {
         const intersects = raycaster.intersectObjects(worldGroup.children, true);
         if(intersects.length > 0){
             const clickedObject = intersects[0].object; // <-- déclaré ici
-            console.log("CLIC SUR :", clickedObject.name);
 
             // bouton bleu de la console : saut en hyperespace
             if (clickedObject.name.includes("Side_Control_Panels_Button_Blue_0001")) {

@@ -62,7 +62,6 @@ export function initAudio(scene, camera) {
         tiechange:       loadSound(audioLoader, listener3, 'public/tiechange.WAV', 1.0),
         laseron:         loadSound(audioLoader, listener3, 'public/laseron.mp3', 2.0),
         laseroff:        loadSound(audioLoader, listener3, 'public/laseroff.mp3', 2.0),
-        explosion:       loadSound(audioLoader, listener3, 'public/explosion.mp3', 2.0),
         boom:            loadSound(audioLoader, listener3, 'public/boom.mp3', 2.0),
         doorSound:       loadSound(audioLoader, listener3, 'public/door.mp3', 0.5),    // son des portes
         button1:         loadSound(audioLoader, listener3, 'public/bipbip1.WAV', 2.0),         // boutons rouges

@@ -55,10 +55,8 @@ export function initPlayer(ctx) {
             if (obj.isMesh) {
                 if (obj.name === "COLLISION_MESH") {
                    collisionMeshInterior  = obj;
-                    console.log('✅ Intérieur:', obj.name);
                 } else if (obj.name === "COLLISION_MESH_EXTERIOR") {
                     collisionMeshExterior = obj;
-                    console.log('✅ Extérieur:', obj.name);
                 }
                 obj.material = new THREE.MeshBasicMaterial({
                     visible: false,
@@ -72,8 +70,6 @@ export function initPlayer(ctx) {
             console.warn('⚠️ Aucun mesh nommé trouvé');
         }
 
-        console.log('Intérieur:', collisionMeshInterior?.name);
-        console.log('Extérieur:', collisionMeshExterior?.name);
 
     }); // ← une seule fermeture ici
 
@@ -127,10 +123,6 @@ export function initPlayer(ctx) {
     player.add(camera); // caméra dans le player
 
 
-
-    // vitesse
-    const moveSpeed = 0.5;
-    const rotationSpeed = 0.02;
 
     const keys = {
       ArrowUp: false,
@@ -383,7 +375,6 @@ export function initPlayer(ctx) {
 
     function exitShip() {
 
-        console.log("Sortie du vaisseau");
         state.isInsideShip = false;
 
         ctx.ships.showCockpit(true);
@@ -398,7 +389,6 @@ export function initPlayer(ctx) {
 
     function enterShip() {
 
-        console.log("Entrée dans le vaisseau");
         state.isInsideShip = true;
         playerState = "flight";
 
@@ -437,8 +427,6 @@ export function initPlayer(ctx) {
 
         }
     }
-    console.log("Player:", player.position);
-    console.log("Detection:", detectionBox);
 
     // avance du TIE en vol (chaque image)
     function updateFlight(dt) {

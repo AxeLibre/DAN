@@ -76,7 +76,6 @@ export function initDecor(ctx) {
     const loader6 = makeGLTFLoader();
     loader6.load('public/k2so.glb', (gltf) => {
         placeCharacters(gltf, 8, K2SO);
-        console.log(gltf.animations);
     });
 
     const loader7 = makeGLTFLoader();
@@ -90,11 +89,6 @@ export function initDecor(ctx) {
         hyperbouton.position.set(0,-12, 98.5);
         hyperbouton.scale.set(10,10,10);
         hyperbouton.rotation.y = Math.PI;
-        hyperbouton.traverse(obj => {
-            if (obj.isMesh) {
-                console.log("Mesh trouvé :", obj.name);
-            }
-        });
         worldGroup.add(hyperbouton);
     });
 
@@ -109,11 +103,8 @@ export function initDecor(ctx) {
         tiefighter0.rotation.y = -Math.PI;
         worldGroup.add(tiefighter0);
         ctx.hyperspace.addFadingObject(tiefighter0);   // glisse et s'estompe pendant le saut
-        console.log(gltf.animations);
-
 
         const mixer1 = new THREE.AnimationMixer(tiefighter0);
-        mixer1.clipAction(gltf.animations[0]).play();
 
         if (gltf.animations.length > 0) {
             const action = mixer1.clipAction(gltf.animations[0]);
@@ -134,11 +125,6 @@ export function initDecor(ctx) {
         worldGroup.add(droid1);
         // le droïde R5 se déplace (animation de son nœud racine) : on suit un de ses morceaux
         droidBody = droid1.getObjectByName('Object_8');
-        console.log(gltf.animations);
-
-
-        const mixer1 = new THREE.AnimationMixer(droid1);
-        mixer1.clipAction(gltf.animations[0]).play();
 
         if (gltf.animations.length > 0) {
             const mixer1 = new THREE.AnimationMixer(droid1);
@@ -154,11 +140,6 @@ export function initDecor(ctx) {
         bb9.scale.set(10,10,10);
         bb9.rotation.y = -Math.PI;
         worldGroup.add(bb9);
-        console.log(gltf.animations);
-
-
-        const mixer1 = new THREE.AnimationMixer(bb9);
-        mixer1.clipAction(gltf.animations[0]).play();
 
         if (gltf.animations.length > 0) {
             const mixer1 = new THREE.AnimationMixer(bb9);

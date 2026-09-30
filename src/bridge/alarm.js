@@ -1,4 +1,3 @@
-import * as THREE from 'three';
 import { makeGLTFLoader } from '../core/loaders.js';
 
 // =========================================================
@@ -8,11 +7,8 @@ export function initAlarm(ctx) {
     const { scene, renderer, env } = ctx;
 
     let panelMesh;
-    let panelMixer;
-    let panelAction;
     let alarmActive = false; // état ON/OFF
     let blinkTime = 0;
-    let envBlink = 0;
     let envToggle = false;
 
     // Chargement du panneau GLB
@@ -26,29 +22,11 @@ export function initAlarm(ctx) {
         panel.scale.set(10,10,10);
         panel.rotation.y = Math.PI; // faire face à la caméra
         scene.add(panel);
-        console.log("Contenu du panel GLB :", panel);
-
-        panel.traverse((child) => {
-            console.log("Objet trouvé :", child.name);
-        });
-
         panelMesh = panel.getObjectByName("Celling_Top_Light_0001");
 
         if (!panelMesh) {
             console.error("❌ panelMesh introuvable !");
-        } else {
-            console.log("✅ panelMesh trouvé :", panelMesh);
         }
-
-        // Si animation exportée depuis Blender
-        if (gltf.animations.length > 0) {
-            panelMixer = new THREE.AnimationMixer(panel);
-            panelAction = panelMixer.clipAction(gltf.animations[0]);
-
-            panelAction.setLoop(THREE.LoopRepeat); // répète tant que actif
-            panelAction.clampWhenFinished = false;
-        }
-
     });
 
     function startAlarm() {
@@ -93,7 +71,6 @@ export function initAlarm(ctx) {
         if (alarmActive && panelMesh) {
 
             blinkTime += dt * 2.805;
-            envBlink += dt * 2.805;
 
             const mat = panelMesh.material;
 

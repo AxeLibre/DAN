@@ -11,8 +11,6 @@ import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPa
 // (qui, elle, ne change pas).
 export const BLOOM_LAYER = 1;
 
-export function enableBloom(root) { root.traverse(o => o.layers.enable(BLOOM_LAYER)); }
-
 export function createBloom(scene, camera, renderer) {
     const bloomComposer = new EffectComposer(renderer);
     bloomComposer.renderToScreen = false;

@@ -86,11 +86,6 @@ export function initScreens(ctx) {
         };
     });
 
-    const screenState1 = { isOn: false };
-    const screenState2 = { isOn: false };
-    const screenState3 = { isOn: false };
-    const screenState4 = { isOn: false };
-
     const clickableObjects = screens.map(s => s.mesh);
 
     // Écrans vidéo cliquables (enregistré UNE seule fois)
