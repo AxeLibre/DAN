@@ -12,6 +12,20 @@ export const HYPER_MOVE_DISTANCE = 200;
 const objectFadeSpeed = 0.02;
 const fadeSpeed = 0.02;
 
+// Rendu de la vidéo du tunnel (réglages à ajuster à l'œil)
+const HYPER_BRIGHTNESS = 1.8;   // 1 = luminosité d'origine de la vidéo
+const HYPER_CONTRAST = 1.6;     // 1 = contraste d'origine ; plus grand = noirs plus profonds, traînées plus vives
+
+// Lumières bleutées devant les fenêtres du pont : elles s'allument avec le saut et scintillent
+const WINDOW_LIGHTS = [
+    { pos: [-45, 6, 138] },    // fenêtre de gauche
+    { pos: [0, 8, 146] },      // fenêtre centrale
+    { pos: [45, 6, 138] }      // fenêtre de droite
+];
+const WINDOW_LIGHT_COLOR = 0x9cc4ff;
+const WINDOW_LIGHT_INTENSITY = 5000;   // au plus fort du saut
+const WINDOW_LIGHT_DISTANCE = 170;
+
 function setOpacityRecursive(object, opacity) {
     object.traverse((child) => {
         if (child.isMesh) {
@@ -63,14 +77,44 @@ export function initHyperspace(ctx) {
                     transparent: true,
                     opacity: 0,
                     depthWrite: false,   // invisible la plupart du temps : ne doit rien masquer derrière lui
-                    side: THREE.DoubleSide
+                    side: THREE.DoubleSide,
+                    toneMapped: false    // l'écran émet sa lumière : pas assombri par l'exposition de la scène (0.3)
                 });
+                // contraste puis luminosité, appliqués à la couleur de la vidéo
+                screenMaterial.onBeforeCompile = (shader) => {
+                    shader.uniforms.uHyperBrightness = { value: HYPER_BRIGHTNESS };
+                    shader.uniforms.uHyperContrast = { value: HYPER_CONTRAST };
+                    shader.fragmentShader = shader.fragmentShader
+                        .replace('#include <common>', '#include <common>\nuniform float uHyperBrightness;\nuniform float uHyperContrast;')
+                        .replace('#include <map_fragment>', `#include <map_fragment>
+                            diffuseColor.rgb = pow(max(diffuseColor.rgb, 0.0), vec3(uHyperContrast)) * uHyperBrightness;`);
+                };
                 obj.material = screenMaterial;
             }
         });
 
         worldGroup.add(hyperscreen);
     });
+
+    // lumières des fenêtres (créées dès le départ, éteintes : pas de recompilation des shaders au 1er saut)
+    const windowLights = WINDOW_LIGHTS.map(l => {
+        const light = new THREE.PointLight(WINDOW_LIGHT_COLOR, 0, WINDOW_LIGHT_DISTANCE, 2);
+        light.position.set(...l.pos);
+        scene.add(light);
+        return light;
+    });
+
+    // scintillement des lumières : traînées du tunnel qui passent + éclairs de temps en temps
+    function updateWindowLights() {
+        const glow = screenMaterial ? screenMaterial.opacity : 0;   // suit le fondu de l'écran
+        const t = performance.now() * 0.001;
+        windowLights.forEach((light, i) => {
+            if (glow <= 0) { light.intensity = 0; return; }
+            const flicker = 0.7 + 0.2 * Math.sin(t * 11 + i * 2.1) * Math.sin(t * 7.3 + i)
+                          + 0.25 * Math.pow(Math.max(0, Math.sin(t * 3.1 + i * 1.7)), 16);
+            light.intensity = WINDOW_LIGHT_INTENSITY * glow * flicker;
+        });
+    }
 
     // objets qui glissent et s'estompent pendant le saut (position de départ mémorisée)
     const objectsToFade = [];
@@ -100,6 +144,7 @@ export function initHyperspace(ctx) {
             scene.background = hyper ? HYPERSPACE_BG : null;
             sky.mesh.visible = !hyper;
         }
+        updateWindowLights();
 
         if (isPlaying && screenMaterial && video) {
             if (fadeState === "fadeIn") {
