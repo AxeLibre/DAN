@@ -77,25 +77,6 @@ export function initPlayer(ctx) {
 
     }); // ← une seule fermeture ici
 
-        // Debug visuel
-        [collisionMeshInterior, collisionMeshExterior].forEach((mesh, index) => {
-            if (mesh) {
-                const color = index === 0 ? 0xff0000 : 0x00ff00;
-                mesh.visible = true;
-                mesh.traverse(obj => {
-                    if (obj.isMesh) {
-                        obj.material = new THREE.MeshBasicMaterial({
-                            color: color,
-                            wireframe: false,
-                            transparent: true,
-                            opacity: 0.3,
-                            side: THREE.DoubleSide // Force la détection des deux côtés
-                        });
-                    }
-                });
-            }
-        });
-
 
     // =====================================================
     // ÉTINCELLES DE COLLISION COQUE - GPU FRIENDLY
