@@ -482,7 +482,42 @@ const cubeTexture = loader.load([
     './public/env8/pz.jpg','./public/env8/nz.jpg'
 ]);
 cubeTexture.colorSpace = THREE.SRGBColorSpace;
-scene.background = cubeTexture;
+// Fond étoilé qui tourne TRÈS lentement. three.js 0.160 ne sait pas faire tourner
+// scene.background : on dessine donc un petit cube autour de la caméra, en premier,
+// avec la même image. Coût : 1 seul appel de dessin.
+scene.background = null;
+const SKY_SPEED = 0.003;   // rad/s → un tour complet en ~35 min
+const skybox = new THREE.Mesh(
+    new THREE.BoxGeometry(1, 1, 1),
+    new THREE.ShaderMaterial({
+        uniforms: { envMap: { value: cubeTexture } },
+        vertexShader: /* glsl */`
+            varying vec3 vDir;
+            void main() {
+                vDir = position;   // direction dans le repère du ciel (qui tourne)
+                gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+            }`,
+        fragmentShader: /* glsl */`
+            uniform samplerCube envMap;
+            varying vec3 vDir;
+            void main() {
+                gl_FragColor = textureCube(envMap, vec3(-vDir.x, vDir.y, vDir.z));
+                #include <colorspace_fragment>
+            }`,
+        side: THREE.BackSide,
+        depthTest: false,
+        depthWrite: false
+    })
+);
+skybox.renderOrder = -1000;        // dessiné avant tout le reste
+skybox.frustumCulled = false;
+skybox.rotation.x = 0.25;          // axe de rotation légèrement incliné
+scene.add(skybox);
+
+function updateSkybox(dt) {
+    camera.getWorldPosition(skybox.position);   // le ciel suit la caméra (toujours "à l'infini")
+    skybox.rotation.y += SKY_SPEED * dt;
+}
 const HYPERSPACE_BG = new THREE.Color(0x0b2a66);   // fond pendant l'hyperespace (bleu du tunnel)
 
 // ==================
@@ -1898,6 +1933,20 @@ const screenOffMaterial4 = new THREE.MeshStandardMaterial({
 
 
 
+// Écrans vidéo (extraits de films) : un écran ÉMET sa lumière. Avant, la vidéo était
+// "peinte" sur un matériau éclairé, assombri par l'éclairage et l'exposition (0.3).
+// Matériau non éclairé et sans tone mapping = vraies couleurs de la vidéo.
+// (pas de bloom : ces écrans ne sont pas sur le calque BLOOM_LAYER)
+const SCREEN_BRIGHTNESS = 1.0;   // 1 = luminosité d'origine de la vidéo, 1.2 = plus lumineux
+function makeScreenVideoMaterial(texture) {
+    return new THREE.MeshBasicMaterial({
+        map: texture,
+        color: new THREE.Color(SCREEN_BRIGHTNESS, SCREEN_BRIGHTNESS, SCREEN_BRIGHTNESS),
+        toneMapped: false,
+        side: THREE.DoubleSide
+    });
+}
+
 const video2 = document.createElement("video");
 video2.src = "public/screen1.mp4";
 video2.preload = "none";   // téléchargée seulement au 1er clic sur l'écran
@@ -1909,12 +1958,7 @@ video2.pause(); // démarre en pause
 const videoTexture2 = new THREE.VideoTexture(video2);
 videoTexture2.colorSpace = THREE.SRGBColorSpace;
 
-const screenMaterial2 = new THREE.MeshStandardMaterial({
-    map: videoTexture2,
-    roughness: 0.8,
-    metalness: 0.01,
-    side: THREE.DoubleSide
-});
+const screenMaterial2 = makeScreenVideoMaterial(videoTexture2);
 
 const screen = new THREE.Mesh(screenGeometry, screenOffMaterial1);
 
@@ -1938,12 +1982,7 @@ video3.pause();
 const videoTexture3 = new THREE.VideoTexture(video3);
 videoTexture3.colorSpace = THREE.SRGBColorSpace;
 
-const screenMaterial3 = new THREE.MeshStandardMaterial({
-    map: videoTexture3,
-    roughness: 0.2,
-    metalness: 0.4,
-    side: THREE.DoubleSide
-});
+const screenMaterial3 = makeScreenVideoMaterial(videoTexture3);
 
 const screen2 = new THREE.Mesh(screenGeometry, screenOffMaterial2);
 
@@ -1968,12 +2007,7 @@ video4.pause();
 const videoTexture4 = new THREE.VideoTexture(video4);
 videoTexture4.colorSpace = THREE.SRGBColorSpace;
 
-const screenMaterial4 = new THREE.MeshStandardMaterial({
-    map: videoTexture4,
-    roughness: 0.2,
-    metalness: 0.4,
-    side: THREE.DoubleSide
-});
+const screenMaterial4 = makeScreenVideoMaterial(videoTexture4);
 
 const screen3 = new THREE.Mesh(screenGeometry, screenOffMaterial3);
 
@@ -1996,12 +2030,7 @@ video5.pause();
 const videoTexture5 = new THREE.VideoTexture(video5);
 videoTexture5.colorSpace = THREE.SRGBColorSpace;
 
-const screenMaterial5 = new THREE.MeshStandardMaterial({
-    map: videoTexture5,
-    roughness: 0.2,
-    metalness: 0.4,
-    side: THREE.DoubleSide
-});
+const screenMaterial5 = makeScreenVideoMaterial(videoTexture5);
 
 const screen4 = new THREE.Mesh(screenGeometry, screenOffMaterial4);
 
@@ -5037,8 +5066,9 @@ function animate(){
 
     // pendant l'hyperespace : fond bleu nuit au lieu des étoiles (rien ne dépasse de l'écran)
     if (screenMaterial) {
-        const bg = screenMaterial.opacity > 0.5 ? HYPERSPACE_BG : cubeTexture;
-        if (scene.background !== bg) scene.background = bg;
+        const hyper = screenMaterial.opacity > 0.5;
+        scene.background = hyper ? HYPERSPACE_BG : null;
+        skybox.visible = !hyper;
     }
 
     if (isPlaying && screenMaterial && video) {
@@ -5171,6 +5201,7 @@ else if (objectFade === "fadeIn") {
     updateTieGuns(dt);
     updateHangarConsole(dt);
     updatePatrols(dt);
+    updateSkybox(dt);
 
 /*
     if (laserMixer) {
