@@ -27,10 +27,13 @@ const WINDOW_LIGHT_COLOR = 0x9cc4ff;
 const WINDOW_LIGHT_INTENSITY = 5000;   // au plus fort du saut
 const WINDOW_LIGHT_DISTANCE = 170;
 
-// Départ : les étoiles s'étirent devant les fenêtres, puis la vidéo du tunnel prend le relais
-const STRETCH_TIME = 0.9;       // secondes avant l'entrée dans le tunnel
+// Sortie du tunnel : flash blanc qui se termine pile à la fin de la vidéo (la caméra tremble
+// pendant tout le flash), puis les étoiles, encore étirées, se résorbent
+const FLASH_TIME = 0.9;         // le flash commence 0,9 s avant la fin de la vidéo…
+const FLASH_PEAK = 0.3;         // …est au plus fort 0,3 s plus tard (le tunnel disparaît dessous)
+const FLASH_SHAKE = 1.2;        // tremblement pendant le flash
 const STREAKS = 600;            // nombre de traînées d'étoiles
-const ARRIVAL_STREAK_TIME = 0.7;
+const ARRIVAL_STREAK_TIME = 1.0;
 
 // Traînées d'étoiles : des lignes devant la passerelle (+Z) qui s'allongent vers la caméra.
 // Tout est calculé dans le shader : un seul appel de dessin. (Pas de bloom : son halo
@@ -80,19 +83,18 @@ function createStarStreaks() {
     return lines;
 }
 
-// Flash blanc plein écran (sortie du tunnel)
+// Flash blanc plein écran (sortie du tunnel) : opacité réglée à chaque image,
+// calée sur le temps de la vidéo
 function createFlash() {
     const el = document.createElement('div');
     el.style.cssText = 'position:fixed;inset:0;background:radial-gradient(circle at 50% 45%, #fff 0%, #e8f2ff 45%, #9cc4ff 100%);' +
         'opacity:0;pointer-events:none;z-index:99997;';
     document.body.appendChild(el);
-    return (strength = 1, duration = 0.7) => {
-        el.style.transition = 'none';
-        el.style.opacity = String(strength);
-        requestAnimationFrame(() => requestAnimationFrame(() => {
-            el.style.transition = `opacity ${duration}s ease-out`;
-            el.style.opacity = '0';
-        }));
+    let current = 0;
+    return (opacity) => {
+        if (opacity === current) return;
+        current = opacity;
+        el.style.opacity = opacity.toFixed(3);
     };
 }
 
@@ -196,12 +198,12 @@ export function initHyperspace(ctx) {
     const pivot = scene.getObjectByName("pivot");   // destroyers en orbite
     if (pivot) addFadingObject(pivot);
 
-    // traînées d'étoiles (départ) et flash blanc (sortie)
+    // flash blanc et traînées d'étoiles (sortie du tunnel)
     const streaks = createStarStreaks();
     scene.add(streaks);
-    const flash = createFlash();
-    let stretchT = 0;          // départ : 0 → 1 pendant STRETCH_TIME
-    let arrivalT = 0;          // sortie : 1 → 0 (les traînées se résorbent)
+    const setFlash = createFlash();
+    let exited = false;        // tunnel déjà caché sous le flash
+    let arrivalT = 0;          // après le flash : 1 → 0 (les traînées se résorbent)
 
     function setStreaks(s) {
         streaks.visible = s > 0;
@@ -212,9 +214,10 @@ export function initHyperspace(ctx) {
     function start() {
         if (!isPlaying && video) {
             isPlaying = true;
-            fadeState = "stretch";   // les étoiles s'étirent d'abord, puis le tunnel apparaît
-            stretchT = 0;
+            fadeState = "fadeIn";
             fade.state = "fadeOut"; // 👈 on lance le fade objets
+            video.currentTime = 0;
+            video.play();
         }
     }
 
@@ -222,20 +225,7 @@ export function initHyperspace(ctx) {
         const dt = k / LEGACY_TICK_RATE;
         const { state } = ctx;
 
-        // départ : étoiles qui s'étirent + tremblement qui monte
-        if (isPlaying && fadeState === "stretch") {
-            stretchT = Math.min(1, stretchT + dt / STRETCH_TIME);
-            setStreaks(stretchT);
-            state.cameraShake = Math.max(state.cameraShake, 0.15 + 0.7 * stretchT);
-            if (stretchT >= 1) {
-                fadeState = "fadeIn";
-                state.cameraShake = Math.max(state.cameraShake, 1.1);   // entrée dans le tunnel
-                video.currentTime = 0;
-                video.play();
-            }
-        }
-        // les traînées s'effacent quand le tunnel est affiché, et se résorbent à la sortie
-        if (fadeState === "fadeIn" || fadeState === "playing") setStreaks(screenMaterial ? 1 - screenMaterial.opacity : 0);
+        // après le flash : les étoiles encore étirées se résorbent
         if (arrivalT > 0) {
             arrivalT = Math.max(0, arrivalT - dt / ARRIVAL_STREAK_TIME);
             setStreaks(arrivalT * arrivalT);
@@ -258,23 +248,37 @@ export function initHyperspace(ctx) {
                 }
             }
             else if (fadeState === "playing") {
-                if (video.currentTime >= video.duration - 0.1 ) fadeState = "fadeOut";
-
+                if (video.duration && video.duration - video.currentTime <= FLASH_TIME) {
+                    fadeState = "flash";
+                    exited = false;
+                }
             }
-            else if (fadeState === "fadeOut") {
-                screenMaterial.opacity -= fadeSpeed * k;
-                if (screenMaterial.opacity <= 0) {
-                    ctx.audio.sounds.boom.play();
-                    // sortie du tunnel : flash blanc, grosse secousse, traînées qui se résorbent
-                    flash(1, 0.8);
-                    state.cameraShake = Math.max(state.cameraShake, 1.4);
+            else if (fadeState === "flash") {
+                const t = FLASH_TIME - Math.max(0, video.duration - video.currentTime);   // 0 → FLASH_TIME
+                state.cameraShake = Math.max(state.cameraShake, FLASH_SHAKE);
+
+                if (t < FLASH_PEAK) {
+                    setFlash(t / FLASH_PEAK);
+                } else {
+                    // au plus fort du flash : le tunnel disparaît dessous, les objets reviennent
+                    if (!exited) {
+                        exited = true;
+                        ctx.audio.sounds.boom.play();
+                        screenMaterial.opacity = 0;
+                        fade.state = "fadeIn"; // 👈 on relance l’apparition
+                    }
+                    const u = (t - FLASH_PEAK) / (FLASH_TIME - FLASH_PEAK);
+                    setFlash(Math.max(0, 1 - u * u));
+                }
+
+                // fin de la vidéo = fin du flash : les étoiles étirées apparaissent
+                if (video.ended || t >= FLASH_TIME - 0.02) {
+                    setFlash(0);
                     arrivalT = 1;
-                    screenMaterial.opacity = 0;
                     video.pause();
                     video.currentTime = 0;
                     fadeState = "idle";
                     isPlaying = false;
-                    fade.state = "fadeIn"; // 👈 on relance l’apparition
                 }
             }
         }

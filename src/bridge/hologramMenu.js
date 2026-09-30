@@ -16,7 +16,8 @@ const THUMB = 144;                                    // vignettes dessinées en
 const CSS = `
 #holo-menu {
     position: fixed; right: 18px; top: 50%; z-index: 99990;
-    width: 200px; max-height: calc(100vh - 40px); overflow-y: auto; padding: 14px 12px 14px;
+    box-sizing: border-box; width: 216px; max-height: calc(100vh - 40px); overflow-y: auto; overflow-x: hidden;
+    padding: 14px 12px 14px;
     font-family: Orbitron, 'Segoe UI', sans-serif; color: #cfefff;
     background: linear-gradient(180deg, rgba(6, 22, 40, .82), rgba(2, 10, 20, .9));
     border: 1px solid rgba(90, 200, 255, .55); border-radius: 14px;
@@ -42,7 +43,7 @@ const CSS = `
 #holo-menu .title { font-size: 13px; font-weight: 700; letter-spacing: .35em; color: #8fdcff;
     text-shadow: 0 0 10px rgba(60, 190, 255, .9); }
 #holo-menu .hint { font-size: 10px; letter-spacing: .2em; opacity: .6; }
-#holo-menu .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+#holo-menu .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 4px; }   /* colonnes égales : un nom long ne déborde plus */
 #holo-menu .card {
     position: relative; cursor: pointer; padding: 4px 2px 6px; border-radius: 8px; text-align: center;
     background: rgba(20, 70, 110, .18); border: 1px solid rgba(90, 200, 255, .2);
@@ -58,8 +59,8 @@ const CSS = `
     animation: holo-card-in .45s forwards, holo-active 1.6s ease-in-out infinite .45s; }
 @keyframes holo-active { 50% { box-shadow: 0 0 26px rgba(80, 210, 255, 1), inset 0 0 20px rgba(80, 210, 255, .5); } }
 #holo-menu canvas { width: 72px; height: 72px; display: block; margin: 0 auto; }
-#holo-menu .label { font-size: 9px; letter-spacing: .12em; text-transform: uppercase; white-space: nowrap;
-    overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
+#holo-menu .label { font-size: 8px; letter-spacing: .06em; text-transform: uppercase; line-height: 1.2;
+    min-height: 2.4em; display: flex; align-items: center; justify-content: center; margin-top: 2px; }   /* noms longs sur 2 lignes */
 @media (max-height: 620px) { #holo-menu canvas { width: 54px; height: 54px; } }
 `;
 
