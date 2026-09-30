@@ -24,3 +24,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# sauvegarde des assets avant optimisation (non publiés)
+.assets-originaux/
