@@ -20,18 +20,17 @@ import { initInfoBubbles, loadStarJediFont } from './bridge/infoBubbles.js';
 import { initHologram } from './bridge/hologram.js';
 import { initConsoleButtons } from './bridge/consoleButtons.js';
 import { initAlarm } from './bridge/alarm.js';
+import { initHangarShips } from './hangar/ships.js';
+import { initHangarConsole } from './hangar/console.js';
+import { initLanding } from './hangar/landing.js';
 
 let mouseSmooth = new THREE.Vector3();
 let plane = new THREE.Plane(new THREE.Vector3(0,0,1),0);
 let clock = new THREE.Clock();
 let playerBox = new THREE.Box3();
 let playerState = "walk"; // "walk" | "flight"
-let gameReady;
-let tieLoaded = false;
-let cockpitLoaded = false;
 let controls;
 let flightControls;
-let cockpit;
 let detectionBox = new THREE.Box3();
 let sdt;
 let collisionRaycaster = new THREE.Raycaster();
@@ -42,19 +41,10 @@ const maxFlightSpeed = 1;
 const acceleration = 0.05;
 let poweroff;
 
-let cockpitFloatTime = 0;
 let originalPositions = new Map();
-let rotationVelocity = 0;
 const rotationAcceleration = 0.2;
 const rotationDamping = 0.85;
 const maxRotationSpeed = 0.3;      // limite max rad/frame
-let ships = [];
-let shipIndex = 0;
-let tiePlayer = null;
-let tiePlayer1;
-let tiefighter;
-let tieinterceptor;
-let tiesilencer;
 let cannonActive = false;
 let lasers = [];
 let cannonTargetY = -20;
@@ -141,88 +131,10 @@ ctx.hologram = initHologram(ctx);
 ctx.consoleButtons = initConsoleButtons(ctx);
 ctx.alarm = initAlarm(ctx);
 
-// ===================================================================
-// BALISE D'ATTERRISSAGE + PILOTE AUTOMATIQUE (entrée / sortie du hangar)
-// ===================================================================
-// 3 cadres holographiques devant le hangar. En entrant dans la zone en volant
-// vers le vaisseau, le pilote automatique fait entrer le TIE dans le hangar.
-// À la sortie du hangar, il fait traverser le tunnel de la tourelle.
-const HANGAR_OUTSIDE = new THREE.Vector3(0, 3.5, -250);   // point de sortie, derrière la tourelle (z ≈ -170)
-const HANGAR_INSIDE  = new THREE.Vector3(0, 3.5, -62);    // dans le hangar, juste passé le détecteur
-const LANDING_ZONE   = new THREE.Box3(new THREE.Vector3(-70, -35, -345), new THREE.Vector3(70, 45, -185));
-
-const landingBeacon = new THREE.Group();
-{
-    const shape = new THREE.Shape();
-    shape.moveTo(-32, -18); shape.lineTo(32, -18); shape.lineTo(32, 18); shape.lineTo(-32, 18); shape.lineTo(-32, -18);
-    const hole = new THREE.Path();
-    hole.moveTo(-29, -15); hole.lineTo(-29, 15); hole.lineTo(29, 15); hole.lineTo(29, -15); hole.lineTo(-29, -15);
-    shape.holes.push(hole);
-    const frameGeo = new THREE.ShapeGeometry(shape);
-    const fillGeo = new THREE.PlaneGeometry(58, 30);
-    [-200, -260, -320].forEach((z, i) => {
-        const mat = new THREE.MeshBasicMaterial({ color: 0x66ccff, transparent: true, opacity: 0.6, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
-        const fill = new THREE.MeshBasicMaterial({ color: 0x3388ff, transparent: true, opacity: 0.05, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
-        const frame = new THREE.Mesh(frameGeo, mat);
-        frame.add(new THREE.Mesh(fillGeo, fill));
-        frame.position.set(0, 3.5, z);
-        frame.userData.index = i;
-        landingBeacon.add(frame);
-    });
-    landingBeacon.visible = false;
-    scene.add(landingBeacon);
-}
-
-const autopilot = { active: false, t: 0, duration: 2, curve: null, yawFrom: 0, yawTo: 0 };
-
-function startAutopilot(points, yawTo, duration) {
-    autopilot.active = true;
-    autopilot.t = 0;
-    autopilot.duration = duration;
-    autopilot.curve = new THREE.CatmullRomCurve3(points);
-    autopilot.yawFrom = player.rotation.y;
-    // chemin angulaire le plus court
-    let d = (yawTo - autopilot.yawFrom) % (Math.PI * 2);
-    if (d > Math.PI) d -= Math.PI * 2;
-    if (d < -Math.PI) d += Math.PI * 2;
-    autopilot.yawTo = autopilot.yawFrom + d;
-    fireHeldSpace = false;
-    fireHeldMouse = false;
-}
-
-function updateAutopilot(dt) {
-    autopilot.t = Math.min(1, autopilot.t + dt / autopilot.duration);
-    const e = autopilot.t * autopilot.t * (3 - 2 * autopilot.t);          // départ et arrivée en douceur
-    player.position.copy(autopilot.curve.getPoint(e));
-    player.rotation.y = autopilot.yawFrom + (autopilot.yawTo - autopilot.yawFrom) * Math.min(1, e * 1.6);
-    // remise à plat du TIE
-    const k = 1 - Math.exp(-5 * dt);
-    flightPitch += (0 - flightPitch) * k;
-    flightRoll += (0 - flightRoll) * k;
-    rotationVelocity = 0;
-    camera.rotation.x = flightPitch;
-    camera.rotation.z = flightRoll;
-    if (autopilot.t >= 1) autopilot.active = false;
-}
-
-function updateLanding(dt) {
-    // balise visible seulement en vol, lumières qui défilent vers le hangar
-    landingBeacon.visible = !state.isInsideShip;
-    if (landingBeacon.visible) {
-        const t = performance.now() * 0.001;
-        landingBeacon.children.forEach(f => {
-            const phase = (t * 1.5 - (2 - f.userData.index) * 0.33) % 1;
-            f.material.opacity = 0.25 + 0.75 * Math.pow(Math.max(0, Math.cos(phase * Math.PI * 2)), 4);
-        });
-    }
-    if (autopilot.active || state.isInsideShip) return;
-
-    // dans la zone ET en direction du vaisseau → atterrissage automatique
-    const fwd = camera.getWorldDirection(new THREE.Vector3());
-    if (LANDING_ZONE.containsPoint(player.position) && fwd.z > 0.3) {
-        startAutopilot([player.position.clone(), new THREE.Vector3(0, 3.5, -200), HANGAR_INSIDE.clone()], Math.PI, 2.6);
-    }
-}
+// Hangar : TIE au choix, console de choix, balise + pilote automatique (voir src/hangar/)
+ctx.ships = initHangarShips(ctx);
+ctx.hangarConsole = initHangarConsole(ctx);
+ctx.landing = initLanding(ctx);
 
 let detectionMesh;
 const gltfLoader = makeGLTFLoader();
@@ -293,201 +205,6 @@ gltfLoader.load('public/cage.glb', (gltf) => {
     });
 
 // (l'ancienne tour extérieure star_destroyer_tower2.glb est remplacée par l'Executor)
-
-gltfLoader.load('public/tieplayer.glb', (gltf) => {
-    tiePlayer1 = gltf.scene;
-    tiePlayer1.position.set(0, -1, -70);
-    tiePlayer1.scale.set(2,2,2);
-    tiePlayer1.rotation.y = Math.PI; 
-    scene.add(tiePlayer1);
-    tieLoaded = true;
-    checkGameReady();
-    addShip(tiePlayer1);
-});
-
-gltfLoader.load('public/tiefighter.glb', (gltf) => {
-    tiefighter = gltf.scene;
-    tiefighter.position.set(0, -1, -70);
-    tiefighter.scale.set(0.02,0.02,0.02);
-    tiefighter.rotation.y = Math.PI; 
-    scene.add(tiefighter);
-    tieLoaded = true;
-    checkGameReady();
-    addShip(tiefighter);
-
-    const tiefighter2 = tiefighter.clone();
-    tiefighter2.position.set(12, 15, -70);
-    scene.add(tiefighter2);
-
-    const tiefighter3 = tiefighter.clone();
-    tiefighter3.position.set(12, 15, -58);
-    scene.add(tiefighter3);
-
-    const tiefighter4 = tiefighter.clone();
-    tiefighter4.position.set(0, 15, -70);
-    scene.add(tiefighter4);
-
-    const tiefighter5 = tiefighter.clone();
-    tiefighter5.position.set(0, 15, -58);
-    scene.add(tiefighter5);
-
-    const tiefighter6 = tiefighter.clone();
-    tiefighter6.position.set(-12, 15, -70);
-    scene.add(tiefighter6);
-
-    const tiefighter7 = tiefighter.clone();
-    tiefighter7.position.set(-12, 15, -58);
-    scene.add(tiefighter7);
-});
-
-
-gltfLoader.load('public/tieinter.glb', (gltf) => {
-    tieinterceptor = gltf.scene;
-    tieinterceptor.position.set(0, -1, -70);
-    tieinterceptor.scale.set(2,2,2);
-    tieinterceptor.rotation.y = Math.PI; 
-    scene.add(tieinterceptor);
-    tieLoaded = true;
-    checkGameReady();
-    addShip(tieinterceptor);
-
-});
-
-gltfLoader.load('public/tiesilencer.glb', (gltf) => {
-    tiesilencer = gltf.scene;
-    tiesilencer.position.set(0, -1, -70);
-    tiesilencer.scale.set(6,6,6);
-    tiesilencer.rotation.y = Math.PI; 
-    scene.add(tiesilencer);
-    tieLoaded = true;
-    checkGameReady();
-    addShip(tiesilencer);
-});
-
-let screenhangar;
-
-gltfLoader.load('public/screenhangar.glb', (gltf) => {
-    screenhangar = gltf.scene;
-    screenhangar.position.set(-22, -12, -73);
-    screenhangar.scale.set(6,6,6);
-    screenhangar.rotation.y = Math.PI/2;
-    scene.add(screenhangar);
-    checkGameReady();
-
-    // matériaux propres à la console (pour les faire clignoter)
-    screenhangar.traverse(o => {
-        if (!o.isMesh || !o.material.emissive) return;
-        o.material = o.material.clone();
-        const n = o.material.name;
-        hangarConsole.mats.push({
-            mat: o.material,
-            kind: /Red/.test(n) ? 'red' : /Blue/.test(n) ? 'blue' : 'screen',
-            base: o.material.emissiveIntensity
-        });
-    });
-    // petite lumière qui éclaire le sol autour de la console
-    hangarConsole.light = new THREE.PointLight(0x66aaff, 0, 45, 2);
-    hangarConsole.light.position.set(-17, -2, -73);
-    scene.add(hangarConsole.light);
-    // (pas de bloom sur la console : l'écran devenait illisible)
-});
-
-// ===================================================================
-// CONSOLE DE CHOIX DU TIE : clignote, réagit au survol et au clic
-// ===================================================================
-const hangarConsole = { mats: [], light: null, hover: false, flash: 0, press: 0, t: 0 };
-const consoleRay = new THREE.Raycaster();
-
-function updateHangarConsole(dt) {
-    if (!screenhangar) return;
-    const hc = hangarConsole;
-    hc.t += dt;
-
-    // survol (seulement à pied, à proximité)
-    const near = state.isInsideShip && player.position.distanceTo(screenhangar.position) < 90;
-    let hover = false;
-    if (near) {
-        consoleRay.setFromCamera(mouse, camera);
-        hover = consoleRay.intersectObject(screenhangar, true).length > 0;
-    }
-    if (hover !== hc.hover) {
-        hc.hover = hover;
-        if (!hud.mode) renderer.domElement.style.cursor = hover ? 'pointer' : '';
-    }
-
-    hc.flash = Math.max(0, hc.flash - dt * 2.5);
-    hc.press = Math.max(0, hc.press - dt * 5);
-
-    // pulsation "regarde-moi !" + boost au survol + flash au clic
-    const pulse = 0.5 + 0.5 * Math.sin(hc.t * 4);
-    const blink = Math.sin(hc.t * 6) > 0;
-    const boost = (hover ? 1.8 : 1) + hc.flash * 4;
-    for (const m of hc.mats) {
-        if (m.kind === 'screen') m.mat.emissiveIntensity = m.base * (0.55 + 0.75 * pulse) * boost;
-        else if (m.kind === 'red') m.mat.emissiveIntensity = m.base * (blink ? 3 : 0.2) * boost;
-        else m.mat.emissiveIntensity = m.base * (blink ? 0.2 : 3) * boost;
-    }
-    if (hc.light) hc.light.intensity = (150 + 250 * pulse) * boost;
-
-    // léger grossissement au survol, "bouton pressé" au clic
-    const s = 6 * (hover ? 1.04 : 1) * (1 - 0.05 * Math.sin(hc.press * Math.PI));
-    screenhangar.scale.setScalar(s);
-}
-
-let hangaracc1;
-
-gltfLoader.load('public/hangaracc1.glb', (gltf) => {
-    hangaracc1 = gltf.scene;
-    hangaracc1.position.set(20, -12, -75);
-    hangaracc1.scale.set(4, 4, 4);
-    hangaracc1.rotation.y = Math.PI / 1.8;
-    scene.add(hangaracc1);
-    checkGameReady();
-
-
-    const hangaracc2 = hangaracc1.clone();
-    hangaracc2.position.set(20, -12, -68);
-    hangaracc2.rotation.y = Math.PI / 2.1;
-    scene.add(hangaracc2);
-});
-
-
-function addShip(ship) {
-
-    ships.push(ship);
-    ship.visible = false;
-
-    // premier vaisseau
-    if (ships.length === 1) {
-        ship.visible = true;
-        tiePlayer = ship;
-        tiePlayer.userData.baseY = -1;
-    }
-}
-
-
-
-
-
-
-
-gltfLoader.load('public/cockpit.glb', (gltf) => {
-    cockpit = gltf.scene;
-    cockpit.visible = false;
-    camera.add(cockpit);
-    cockpit.position.set(0, 0, -1);
-    cockpit.scale.set(3,3,1);
-    cockpit.rotation.y = Math.PI;
-    cockpitLoaded = true;
-    checkGameReady();
-});
-
-function checkGameReady() {
-    if (tieLoaded && cockpitLoaded) {
-        gameReady = true;
-        console.log("GAME READY");
-    }
-}
 
 //************************************************************************** */
 
@@ -568,11 +285,9 @@ laserLoader.load('public/laser.glb', (gltf) => {
 // ===================================================================
 const bolts = new LaserBolts(scene);          // tous les tirs laser
 const fx = new ExplosionFX(scene, 12000);     // toutes les explosions GLSL
-const hud = new CombatHUD();                  // réticule / score / radar
+const hud = ctx.hud = new CombatHUD();        // réticule / score / radar
 let playerKills = 0;
 let cameraShake = 0;
-let fireHeldMouse = false;
-let fireHeldSpace = false;
 
 // 🔊 LASER SOUND (canon de la passerelle)
 // (le son du canon est maintenant spatialisé : voir sfx.laser plus bas)
@@ -731,7 +446,7 @@ function updateTurret(dt) {
 
     // --- tir
     turret.cooldown -= dt;
-    if (turretReady() && fireHeldMouse && turret.cooldown <= 0) {
+    if (turretReady() && state.fireHeldMouse && turret.cooldown <= 0) {
         turret.cooldown = TURRET.FIRE_INTERVAL;
         turret.root.updateMatrixWorld(true);
         const muzzle = turret.recoil.localToWorld(TURRET.MUZZLE.clone());
@@ -814,7 +529,7 @@ function updateTieGuns(dt) {
     const fwd = camera.getWorldDirection(new THREE.Vector3());
     tieLock = findLockTarget(camPos, fwd, TIE_GUN.AIM_ASSIST_DEG, 1500);
 
-    if (!(fireHeldSpace || fireHeldMouse) || tieGunCooldown > 0) return;
+    if (!(state.fireHeldSpace || state.fireHeldMouse) || tieGunCooldown > 0) return;
     tieGunCooldown = TIE_GUN.FIRE_INTERVAL;
 
     const from = camera.localToWorld(TIE_GUN.OFFSETS[tieGunSide].clone());
@@ -2196,7 +1911,7 @@ const capitalTemplates = [null, null, null];
 // =====================================================================================================================
 
 // Crée un player pour gérer la rotation globale
-const player = new THREE.Group();
+const player = ctx.player = new THREE.Group();
 player.position.set(0,3.5,-60); // position initiale
 player.rotation.y = Math.PI;
 
@@ -2287,19 +2002,19 @@ let boostHeld = false;
 window.addEventListener("keydown", (event) => {
     if (event.code === "Space") {
         event.preventDefault();
-        fireHeldSpace = true;
+        state.fireHeldSpace = true;
     }
     if (event.key === "Shift") boostHeld = true;
 });
 
 window.addEventListener("keyup", (event) => {
-    if (event.code === "Space") fireHeldSpace = false;
+    if (event.code === "Space") state.fireHeldSpace = false;
     if (event.key === "Shift") boostHeld = false;
 });
 
 window.addEventListener("blur", () => {
-    fireHeldSpace = false;
-    fireHeldMouse = false;
+    state.fireHeldSpace = false;
+    state.fireHeldMouse = false;
     boostHeld = false;
 });
 
@@ -2360,7 +2075,7 @@ if (clickedObject.name.includes("Side_Control_Panels_Button_White_0001")) {
 
     cannonActive = !cannonActive;
     setTurret(cannonActive);
-    fireHeldMouse = false;
+    state.fireHeldMouse = false;
 
     if (cannonActive) laseron.play();
     else laseroff.play();
@@ -2437,26 +2152,14 @@ if (clickedObject.name.includes("Side_Control_Panels_Button_White_0001")) {
     // CHANGEMENT DE TIE : clic sur la console du hangar ("click here for change your TIE")
     // ou sur le TIE lui-même. Testé à part : avant, ce test n'était fait que si le clic
     // touchait AUSSI le décor de la passerelle, et il ignorait la console.
-    if (state.isInsideShip && ships.length > 1) {
-        const targets = [screenhangar, tiePlayer].filter(Boolean);
+    if (state.isInsideShip && ctx.ships.count > 1) {
+        const targets = [ctx.hangarConsole.screen, ctx.ships.tiePlayer].filter(Boolean);
         if (raycaster.intersectObjects(targets, true).length > 0) {
 
             tiechange.stop();
             tiechange.play();
-            hangarConsole.flash = 1;   // flash + "bouton pressé" sur la console
-            hangarConsole.press = 1;
-            // cacher le vaisseau actuel
-            ships[shipIndex].visible = false;
-
-            // passer au suivant
-            shipIndex++;
-            if (shipIndex >= ships.length) shipIndex = 0;
-
-            // afficher le suivant
-            ships[shipIndex].visible = true;
-
-            // mettre à jour le vaisseau actif
-            tiePlayer = ships[shipIndex];
+            ctx.hangarConsole.press();   // flash + "bouton pressé" sur la console
+            ctx.ships.nextShip();
         }
     }
 });
@@ -2478,11 +2181,11 @@ renderer.domElement.addEventListener('pointerdown', (event) => {
     mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
     mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
 
-    if (!state.isInsideShip) { fireHeldMouse = true; return; }   // en vol
-    if (turretReady() && !isUiClick()) fireHeldMouse = true; // au canon
+    if (!state.isInsideShip) { state.fireHeldMouse = true; return; }   // en vol
+    if (turretReady() && !isUiClick()) state.fireHeldMouse = true; // au canon
 });
 
-window.addEventListener('pointerup', () => { fireHeldMouse = false; });
+window.addEventListener('pointerup', () => { state.fireHeldMouse = false; });
 
 // Affichage du HUD selon la situation
 function refreshHud() {
@@ -2584,9 +2287,7 @@ function tryMove(moveVector) {
 }
 
 
-let flightPitch = 0;
 let pitchVelocity = 0;
-let flightRoll = 0;
 const FLIGHT_PITCH_SPEED = 1.1;   // rad/s
 const FLIGHT_PITCH_LIMIT = 1.25;  // ~70°
 
@@ -2639,26 +2340,26 @@ function updateCamera(dt = 1 / LEGACY_TICK_RATE) {
     const k = dt * LEGACY_TICK_RATE;
 
     // gauche / droite (même sensation qu'avant, quel que soit l'écran)
-    if (keys.ArrowRight) rotationVelocity -= rotationAcceleration * 0.016 * k;
-    if (keys.ArrowLeft)  rotationVelocity += rotationAcceleration * 0.016 * k;
-    rotationVelocity = THREE.MathUtils.clamp(rotationVelocity, -maxRotationSpeed, maxRotationSpeed);
-    player.rotation.y += rotationVelocity * k;
-    rotationVelocity *= Math.pow(rotationDamping, k);
+    if (keys.ArrowRight) state.rotationVelocity -= rotationAcceleration * 0.016 * k;
+    if (keys.ArrowLeft)  state.rotationVelocity += rotationAcceleration * 0.016 * k;
+    state.rotationVelocity = THREE.MathUtils.clamp(state.rotationVelocity, -maxRotationSpeed, maxRotationSpeed);
+    player.rotation.y += state.rotationVelocity * k;
+    state.rotationVelocity *= Math.pow(rotationDamping, k);
 
     if (playerState === "flight") {
         // EN VOL : haut / bas = monter / descendre
         const input = (keys.ArrowUp ? 1 : 0) - (keys.ArrowDown ? 1 : 0);
         pitchVelocity += (input * FLIGHT_PITCH_SPEED - pitchVelocity) * (1 - Math.exp(-6 * dt));
-        flightPitch = THREE.MathUtils.clamp(flightPitch + pitchVelocity * dt, -FLIGHT_PITCH_LIMIT, FLIGHT_PITCH_LIMIT);
+        state.flightPitch = THREE.MathUtils.clamp(state.flightPitch + pitchVelocity * dt, -FLIGHT_PITCH_LIMIT, FLIGHT_PITCH_LIMIT);
 
         // le TIE s'incline dans les virages
-        const rollTarget = THREE.MathUtils.clamp(rotationVelocity * 10, -0.45, 0.45);
-        flightRoll += (rollTarget - flightRoll) * (1 - Math.exp(-5 * dt));
+        const rollTarget = THREE.MathUtils.clamp(state.rotationVelocity * 10, -0.45, 0.45);
+        state.flightRoll += (rollTarget - state.flightRoll) * (1 - Math.exp(-5 * dt));
     } else {
         // À PIED : retour à l'horizontale + avancer / reculer
         const back = 1 - Math.exp(-6 * dt);
-        flightPitch += (0 - flightPitch) * back;
-        flightRoll += (0 - flightRoll) * back;
+        state.flightPitch += (0 - state.flightPitch) * back;
+        state.flightRoll += (0 - state.flightRoll) * back;
         pitchVelocity = 0;
 
         let moveVector = new THREE.Vector3();
@@ -2671,8 +2372,8 @@ function updateCamera(dt = 1 / LEGACY_TICK_RATE) {
         }
     }
 
-    camera.rotation.x = flightPitch;
-    camera.rotation.z = flightRoll;
+    camera.rotation.x = state.flightPitch;
+    camera.rotation.z = state.flightRoll;
 }
 
 
@@ -2720,15 +2421,14 @@ function exitShip() {
     console.log("Sortie du vaisseau");
     state.isInsideShip = false;
 
-    if (tiePlayer) tiePlayer.visible = false;
-    if (cockpit) cockpit.visible = true;
+    ctx.ships.showCockpit(true);
 
     audio.switchToFlightAudio();
 
     enableFlightMode();
 
     // pilote automatique : traversée du tunnel de la tourelle jusqu'à l'extérieur
-    startAutopilot([player.position.clone(), new THREE.Vector3(0, 3.5, -130), HANGAR_OUTSIDE.clone()], 0, 2.2);
+    ctx.landing.leaveHangar();
 }
 
 function enterShip() {
@@ -2737,8 +2437,7 @@ function enterShip() {
     state.isInsideShip = true;
     playerState = "flight";
 
-    if (tiePlayer) tiePlayer.visible = true;
-    if (cockpit) cockpit.visible = false;
+    ctx.ships.showCockpit(false);
 
     audio.switchToShipAudio();
 
@@ -2748,7 +2447,7 @@ function enterShip() {
 
 function updateinout() {
 
-    if (!gameReady || !detectionMesh) return;
+    if (!ctx.ships.isReady() || !detectionMesh) return;
 
     // Met à jour la box de détection dynamiquement
     detectionMesh.updateWorldMatrix(true, true);
@@ -2791,7 +2490,6 @@ const bloom = createBloom(scene, camera, renderer);
 // objets lumineux
 bolts.mesh.layers.enable(BLOOM_LAYER);
 fx.points.layers.enable(BLOOM_LAYER);
-landingBeacon.traverse(o => o.layers.enable(BLOOM_LAYER));
 // (hyperespace, console du hangar, hologramme : volontairement SANS bloom)
 
 
@@ -2799,8 +2497,6 @@ landingBeacon.traverse(o => o.layers.enable(BLOOM_LAYER));
 initVolumeControl(audio, [ctx.hyperspace.video, ...ctx.screens.videos, ctx.mapScreen.video]);
 
 
-let levitationClock = new THREE.Clock();
-let baseY = null; // pas encore défini
 
 // =========================================================================================
 // =========================================================================================
@@ -2816,7 +2512,7 @@ function animate(){
     const k = dt * LEGACY_TICK_RATE;             // équivalent "nombre d'images" de l'ancienne boucle
     lastFrameDt = dt;
 
-    if (autopilot.active) {
+    if (ctx.landing.autopilotActive()) {
         currentFlightSpeed = FLIGHT_CRUISE_SPEED;   // le pilote automatique gère la trajectoire
     } else if (playerState === "flight") {
         const targetSpeed = boostHeld ? FLIGHT_BOOST_SPEED : FLIGHT_CRUISE_SPEED;
@@ -2836,9 +2532,9 @@ function animate(){
     ctx.decor.update(dt, player.position);
 
     ctx.destroyers.update(k);
-    if (autopilot.active) updateAutopilot(dt);
+    if (ctx.landing.autopilotActive()) ctx.landing.updateAutopilot(dt);
     else updateCamera(dt);
-    updateLanding(dt);
+    ctx.landing.update(dt);
     
     // (depuis l'origine, l'hyperespace n'est animé qu'une fois les portes chargées)
     if (ctx.doors.ready()) {
@@ -2850,15 +2546,7 @@ function animate(){
 
     // ======= Levitation TIE PLAYER =====================
 
-    if (baseY === null && tiePlayer) baseY = tiePlayer.position.y;
-
-    const t = levitationClock.getElapsedTime();
-
-    if (tiePlayer) {
-        // lévitation fluide : amplitude + vitesse ajustables
-        tiePlayer.position.y = baseY + Math.sin(t * 2) * 0.2;
-
-    }
+    ctx.ships.updateLevitation();
 
 
     updateinout();
@@ -2872,7 +2560,7 @@ function animate(){
     // ===== ARMES & EFFETS =====
     updateTurret(dt);
     updateTieGuns(dt);
-    updateHangarConsole(dt);
+    ctx.hangarConsole.update(dt);
     updatePatrols(dt);
     sky.update(dt);
 
@@ -2888,19 +2576,7 @@ function animate(){
 
     ctx.alarm.update(dt);
 
-    if (cockpit && !state.isInsideShip) {
-
-        cockpitFloatTime += dt;
-
-        // Oscillation verticale douce
-        cockpit.position.y = Math.sin(cockpitFloatTime * 1) * 0.02;
-
-        // Légère rotation latérale
-        cockpit.rotation.z = Math.sin(cockpitFloatTime * 2) * 0.01;
-
-        // Micro pitch avant/arrière
-        cockpit.rotation.x = Math.sin(cockpitFloatTime * 1.5) * 0.005;
-    }
+    ctx.ships.updateCockpit(dt);
 
 
     ctx.mapScreen.update(dt);

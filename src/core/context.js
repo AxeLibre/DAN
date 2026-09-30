@@ -21,7 +21,14 @@ export function createContext() {
         mouse: new THREE.Vector3(),
         raycaster: new THREE.Raycaster(),
         state: {
-            isInsideShip: true      // à pied dans le destroyer (passerelle + hangar) / en vol dehors
+            isInsideShip: true,     // à pied dans le destroyer (passerelle + hangar) / en vol dehors
+            // tir maintenu (clic gauche / barre d'espace)
+            fireHeldMouse: false,
+            fireHeldSpace: false,
+            // orientation du joueur (clavier, ou pilote automatique qui remet le TIE à plat)
+            rotationVelocity: 0,    // vitesse de rotation gauche / droite
+            flightPitch: 0,         // nez du TIE vers le haut / le bas
+            flightRoll: 0           // inclinaison dans les virages
         }
     };
 }
