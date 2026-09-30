@@ -482,7 +482,7 @@ export class CombatHUD {
 
         // Score
         this.score = document.createElement('div');
-        this.score.style.cssText = 'position:absolute;top:18px;right:24px;color:#FFE81F;font-size:22px;text-shadow:0 0 10px rgba(255,232,31,.7);';
+        this.score.style.cssText = 'position:absolute;top:18px;right:24px;color:#FFE81F;font-size:22px;line-height:1.35;text-align:right;text-shadow:0 0 10px rgba(255,232,31,.7);';
         root.appendChild(this.score);
 
         // Radar
@@ -508,9 +508,10 @@ export class CombatHUD {
         this.mode = mode;
     }
 
-    setScore(n) {
+    setScore(n, capitals = 0) {
         this.kills = n;
-        this.score.textContent = `rebelles : ${n}`;
+        this.capitals = capitals;
+        this.score.innerHTML = `<div>chasseurs : ${n}</div><div>croiseurs : ${capitals}</div>`;
     }
 
     showLock(x, y, visible) {
