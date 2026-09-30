@@ -90,6 +90,7 @@ export function initScreens(ctx) {
 
     // Écrans vidéo cliquables (enregistré UNE seule fois)
     function onMouseClick(event) {
+        if (event.target !== ctx.renderer.domElement) return;   // clic sur un menu, pas sur la scène
         const m = new THREE.Vector2(
             (event.clientX / window.innerWidth) * 2 - 1,
             -(event.clientY / window.innerHeight) * 2 + 1

@@ -15,6 +15,7 @@ import { initDoors } from './bridge/doors.js';
 import { initDecor } from './bridge/decor.js';
 import { initInfoBubbles, loadStarJediFont } from './bridge/infoBubbles.js';
 import { initHologram } from './bridge/hologram.js';
+import { initHologramMenu } from './bridge/hologramMenu.js';
 import { initConsoleButtons } from './bridge/consoleButtons.js';
 import { initAlarm } from './bridge/alarm.js';
 import { initClicks } from './bridge/clicks.js';
@@ -57,6 +58,7 @@ ctx.screens = initScreens(ctx);
 ctx.doors = initDoors(ctx);
 ctx.infoBubbles = initInfoBubbles(ctx);
 ctx.hologram = initHologram(ctx);
+ctx.hologramMenu = initHologramMenu(ctx);
 ctx.consoleButtons = initConsoleButtons(ctx);
 ctx.alarm = initAlarm(ctx);
 

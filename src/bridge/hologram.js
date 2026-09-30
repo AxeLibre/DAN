@@ -16,8 +16,22 @@ function loadShape(name) {
         .then(buf => new Float32Array(buf));
 }
 
-const HOLO_SHAPES = ['empire', 'tiefighter', 'tieinterceptor', 'tiebomber', 'atst', 'atat',
-                     'stardestroyer', 'deathstar', 'darkmaul', 'darkvador', 'kylo', 'galaxy'];
+// Formes de l'hologramme, dans l'ordre du bouton "suivant" et du menu.
+// Pour en ajouter une depuis un modèle .glb : node tools/glb-to-holo.mjs <modèle.glb> <nom>
+export const HOLO_SHAPES = [
+    { file: 'empire',         label: 'Empire' },
+    { file: 'tiefighter',     label: 'TIE Fighter' },
+    { file: 'tieinterceptor', label: 'TIE Interceptor' },
+    { file: 'tiebomber',      label: 'TIE Bomber' },
+    { file: 'atst',           label: 'AT-ST' },
+    { file: 'atat',           label: 'AT-AT' },
+    { file: 'stardestroyer',  label: 'Star Destroyer' },
+    { file: 'deathstar',      label: 'Étoile Noire' },
+    { file: 'darkmaul',       label: 'Dark Maul' },
+    { file: 'darkvador',      label: 'Dark Vador' },
+    { file: 'kylo',           label: 'Kylo Ren' },
+    { file: 'galaxy',         label: 'Galaxie' }
+];
 
 const hologramFadeSpeed = 0.03;
 const morphDuration = 2.0;   // durée du morph
@@ -42,7 +56,10 @@ export function initHologram(ctx) {
     // pour que le bouton PLAY attende aussi l'hologramme
     loadingManager.itemStart('hologram');
 
-    Promise.all(HOLO_SHAPES.map(loadShape)).then(list => {
+    let rawShapes = null;          // formes telles que chargées (vignettes du menu)
+
+    Promise.all(HOLO_SHAPES.map(s => loadShape(s.file))).then(list => {
+        rawShapes = list;
 
         // l'empire deux fois de suite pour le "battement" (comme avant)
         const shapes = [list[0], ...list];
@@ -224,9 +241,9 @@ export function initHologram(ctx) {
     }
 
     // ------------------------------------------------------------
-    // Bouton rouge : forme suivante
+    // Morph vers une forme (index dans la liste interne, où l'empire est doublé au début)
     // ------------------------------------------------------------
-    function next() {
+    function morphTo(index) {
         if (!material || !positionAttr || !targetAttr) return;
 
         // Préparer la prochaine forme
@@ -234,7 +251,7 @@ export function initHologram(ctx) {
         positionAttr.needsUpdate = true;
 
         currentIndex = nextIndex;
-        nextIndex = (nextIndex + 1) % shapes.length;
+        nextIndex = index;
 
         targetAttr.array.set(shapes[nextIndex]);
         targetAttr.needsUpdate = true;
@@ -244,5 +261,21 @@ export function initHologram(ctx) {
         morphState = "morph";
     }
 
-    return { update, toggle, next };
+    // Bouton rouge : forme suivante
+    function next() {
+        if (shapes) morphTo((nextIndex + 1) % shapes.length);
+    }
+
+    // Menu : forme choisie (index dans HOLO_SHAPES)
+    function show(i) {
+        if (shapes && i + 1 !== nextIndex) morphTo(i + 1);
+    }
+
+    return {
+        update, toggle, next, show,
+        isActive: () => hologramActive,
+        ready: () => !!material,
+        rawShapes: () => rawShapes,
+        currentShape: () => Math.max(0, nextIndex - 1)   // forme affichée (ou en cours d'apparition)
+    };
 }

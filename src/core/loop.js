@@ -53,6 +53,7 @@ export function startLoop(ctx, bloom) {
         ctx.playerControls.updateCameraShake(dt);
 
         ctx.consoleButtons.update(dt);
+        ctx.hologramMenu.update(player.position);
         ctx.infoBubbles.update(player.position);
         ctx.decor.updateDroidBeeps(dt);
 

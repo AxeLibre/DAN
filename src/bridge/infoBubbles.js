@@ -129,6 +129,9 @@ PLAY FiLM`,
 
         zones.forEach(zone => {
 
+            // le menu de l'hologramme remplace sa bulle d'aide quand il est ouvert
+            if (zone.bubble === bubble1 && ctx.hologramMenu && ctx.hologramMenu.isOpen()) return;
+
             const distance = playerPosition.distanceTo(zone.pos);
 
             if (distance < zone.size) {
