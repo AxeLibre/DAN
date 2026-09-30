@@ -1,5 +1,4 @@
 import * as THREE from 'three'
-import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { LaserBolts, ExplosionFX, CombatHUD, DebrisField, InstancedShips, segmentSphere, LASER_GREEN, LASER_RED } from './weapons.js';
 import { RebelFleet } from './fleet.js';
 import { LEGACY_TICK_RATE, FLIGHT_CRUISE_SPEED, FLIGHT_BOOST_SPEED, BATTLE_Y, BATTLE_MIN_Z } from './core/constants.js';
@@ -16,15 +15,13 @@ import { initHyperspace, HYPER_MOVE_DISTANCE } from './bridge/hyperspace.js';
 import { initMapScreen } from './bridge/mapScreen.js';
 import { initScreens } from './bridge/screens.js';
 import { initDoors } from './bridge/doors.js';
+import { initDecor } from './bridge/decor.js';
+import { initInfoBubbles, loadStarJediFont } from './bridge/infoBubbles.js';
+import { initHologram } from './bridge/hologram.js';
 
-let particleSystem, material;
 let mouseSmooth = new THREE.Vector3();
 let plane = new THREE.Plane(new THREE.Vector3(0,0,1),0);
 let clock = new THREE.Clock();
-let hologramActive = false;   // état logique ON/OFF
-let hologramOpacity = 0;     // valeur actuelle
-let hologramTarget = 0;      // 0 ou 1
-const hologramFadeSpeed = 0.03;
 let playerBox = new THREE.Box3();
 let playerState = "walk"; // "walk" | "flight"
 let gameReady;
@@ -85,15 +82,7 @@ window.createStandardExplosion = createStandardExplosion;
 window.createSparkParticles = createSparkParticles;
 window.createRingExplosionComplete = createRingExplosionComplete;
 
-const starJediFont = new FontFace(
-    "StarJedi",
-    "url(fonts/Starjedi.ttf)" // relatif : marche sur GitHub Pages (/DAN/) ET avec Vite
-);
-
-starJediFont.load().then(function(font){
-    document.fonts.add(font);
-    console.log("StarJedi chargée");
-});
+loadStarJediFont();   // police des bulles d'info (voir src/bridge/infoBubbles.js)
 
 
 
@@ -142,27 +131,18 @@ ctx.destroyers = initDestroyers(ctx);
 const { pivot } = ctx.destroyers;
 let mixer;
 
-const loader2 = makeGLTFLoader();
-
-loader2.load('public/projecteur4.glb', (gltf)=>{
-    const projector = gltf.scene;
-    projector.name = "bridge_shell";   // la coque de la passerelle + hangar (toujours affichée)
-    projector.position.set(0,-12, 98.5);
-    projector.scale.set(10,10,10);
-    projector.rotation.y = Math.PI; // faire face à la caméra
-    worldGroup.add(projector);
-});
-
-
 // Executor, vu de dehors (voir src/executor.js)
 ctx.executor = initExecutor(ctx);
 const { exteriorColliders, inHangarCut } = ctx.executor;
 
 // Passerelle : hyperespace, écran MAP, écrans vidéo, portes (voir src/bridge/)
+ctx.decor = initDecor(ctx);
 ctx.hyperspace = initHyperspace(ctx);
 ctx.mapScreen = initMapScreen(ctx);
 ctx.screens = initScreens(ctx);
 ctx.doors = initDoors(ctx);
+ctx.infoBubbles = initInfoBubbles(ctx);
+ctx.hologram = initHologram(ctx);
 
 // ===================================================================
 // BALISE D'ATTERRISSAGE + PILOTE AUTOMATIQUE (entrée / sortie du hangar)
@@ -246,207 +226,6 @@ function updateLanding(dt) {
         startAutopilot([player.position.clone(), new THREE.Vector3(0, 3.5, -200), HANGAR_INSIDE.clone()], Math.PI, 2.6);
     }
 }
-
-const loader5 = makeGLTFLoader();
-const mixers = []; // tableau global pour stocker les mixers des deathtroopers
-
-
-loader5.load('public/stormtrooper2.glb', (gltf) => {
-    // Premier
-    const stormtrooper1 = gltf.scene;
-    stormtrooper1.position.set(35, -12, 35);
-    stormtrooper1.scale.set(5,5,5);
-    stormtrooper1.rotation.y = -Math.PI/2;
-    worldGroup.add(stormtrooper1);
-
-    const mixer1 = new THREE.AnimationMixer(stormtrooper1);
-    mixer1.clipAction(gltf.animations[0]).play();
-
-    // Second clone ANIMABLE
-    const stormtrooper2 = SkeletonUtils.clone(stormtrooper1); // ✅ clone correct pour squelette
-    stormtrooper2.position.set(-35, -12, 35);
-    stormtrooper2.rotation.y = Math.PI/2;
-    worldGroup.add(stormtrooper2);
-
-    const mixer2 = new THREE.AnimationMixer(stormtrooper2);
-    mixer2.clipAction(gltf.animations[0]).play();
-
-     // 3eme clone ANIMABLE
-    const stormtrooper3 = SkeletonUtils.clone(stormtrooper1); // ✅ clone correct pour squelette
-    stormtrooper3.position.set(-25, -12, -30);
-    stormtrooper3.rotation.y = Math.PI/8;
-    worldGroup.add(stormtrooper3);
-
-    const mixer3 = new THREE.AnimationMixer(stormtrooper3);
-    mixer3.clipAction(gltf.animations[0]).play();
-
-    // 4eme clone ANIMABLE
-    const stormtrooper4 = SkeletonUtils.clone(stormtrooper1); // ✅ clone correct pour squelette
-    stormtrooper4.position.set(25, -12, -30);
-    stormtrooper4.rotation.y = -Math.PI/8;
-    worldGroup.add(stormtrooper4);
-
-    const mixer4 = new THREE.AnimationMixer(stormtrooper4);
-    mixer4.clipAction(gltf.animations[0]).play();
-
-    mixers.push(mixer1, mixer2,mixer3,mixer4);
-
-
-});
-
-const loader6 = makeGLTFLoader();
-
-loader6.load('public/k2so.glb', (gltf) => {
-    // Premier
-    const k2so1 = gltf.scene;
-    k2so1.position.set(50, -12, 15);
-    k2so1.scale.set(8,8,8);
-    k2so1.rotation.y = Math.PI/2;
-    worldGroup.add(k2so1);
-
-    const mixer1 = new THREE.AnimationMixer(k2so1);
-    mixer1.clipAction(gltf.animations[0]).play();
-
-    console.log(gltf.animations);
-
-
-
-// Second clone ANIMABLE
-    const k2so2 = SkeletonUtils.clone(k2so1); // ✅ clone correct pour squelette
-    k2so2.position.set(-50, -12, -15);
-    k2so2.rotation.y = -Math.PI/2;
-    worldGroup.add(k2so2);
-
-    const mixer2 = new THREE.AnimationMixer(k2so2);
-    mixer2.clipAction(gltf.animations[0]).play();
-
-    mixers.push(mixer1, mixer2)
-});
-
-const loader7 = makeGLTFLoader();
-
-loader7.load('public/officer.glb', (gltf) => {
-    // Premier
-    const officer1 = gltf.scene;
-    officer1.position.set(60, -12, 80);
-    officer1.scale.set(12,12,12);
-    //officer1.rotation.y = -Math.PI;
-    worldGroup.add(officer1);
-
-
-    const mixer1 = new THREE.AnimationMixer(officer1);
-    mixer1.clipAction(gltf.animations[0]).play();
-
-    // Second clone ANIMABLE
-    const officer2 = SkeletonUtils.clone(officer1); // ✅ clone correct pour squelette
-    officer2.position.set(-33, -12, 123);
-    officer2.rotation.y = -Math.PI/4;
-    worldGroup.add(officer2);
-
-
-
-    const mixer2 = new THREE.AnimationMixer(officer2);
-    mixer2.clipAction(gltf.animations[0]).play();
-
-      // 3eme clone ANIMABLE
-    const officer3 = SkeletonUtils.clone(officer1); // ✅ clone correct pour squelette
-    officer3.position.set(-15, -30, 93);
-    officer3.rotation.y = -Math.PI;
-    worldGroup.add(officer3);
-
-
-
-    const mixer3 = new THREE.AnimationMixer(officer3);
-    mixer3.clipAction(gltf.animations[0]).play();
-
-    // 4eme clone ANIMABLE
-    const officer4 = SkeletonUtils.clone(officer1); // ✅ clone correct pour squelette
-    officer4.position.set(-15, -30, 75);
-    worldGroup.add(officer4);
-
-    const mixer4 = new THREE.AnimationMixer(officer4);
-    mixer4.clipAction(gltf.animations[0]).play();
-
-    // 5eme clone ANIMABLE
-    const officer5 = SkeletonUtils.clone(officer1); // ✅ clone correct pour squelette
-    officer5.position.set(-25, -30, 70);
-    officer5.rotation.y = -Math.PI/2
-    worldGroup.add(officer5);
-
-    const mixer5 = new THREE.AnimationMixer(officer5);
-    mixer5.clipAction(gltf.animations[0]).play();
-
-    // 6eme clone ANIMABLE
-    const officer6 = SkeletonUtils.clone(officer1); // ✅ clone correct pour squelette
-    officer6.position.set(15, -30, 93);
-    officer6.rotation.y = Math.PI;
-    worldGroup.add(officer6);
-
-    const mixer6 = new THREE.AnimationMixer(officer6);
-    mixer6.clipAction(gltf.animations[0]).play();
-
-    // 7eme clone ANIMABLE
-    const officer7 = SkeletonUtils.clone(officer1); // ✅ clone correct pour squelette
-    officer7.position.set(15, -30, 75);
-    worldGroup.add(officer7);
-
-    const mixer7 = new THREE.AnimationMixer(officer7);
-    mixer7.clipAction(gltf.animations[0]).play();
-
-    // 8eme clone ANIMABLE
-    const officer8 = SkeletonUtils.clone(officer1); // ✅ clone correct pour squelette
-    officer8.position.set(25, -30, 70);
-    officer8.rotation.y = Math.PI/2;
-    worldGroup.add(officer8);
-
-    const mixer8 = new THREE.AnimationMixer(officer8);
-    mixer8.clipAction(gltf.animations[0]).play();
-
-    // 9eme clone ANIMABLE
-    const officer9 = SkeletonUtils.clone(officer1); // ✅ clone correct pour squelette
-    officer9.position.set(-25, -30, 85);
-    officer9.rotation.y = -Math.PI/2
-    worldGroup.add(officer9);
-
-    const mixer9 = new THREE.AnimationMixer(officer9);
-    mixer9.clipAction(gltf.animations[0]).play();
-
-    // 10eme clone ANIMABLE
-    const officer10 = SkeletonUtils.clone(officer1); // ✅ clone correct pour squelette
-    officer10.position.set(16, -28, 50);
-    officer10.rotation.y = -Math.PI/2
-    worldGroup.add(officer10);
-
-    //const helper = new THREE.BoxHelper(officer10, 0xff0000);
-    //worldGroup.add(helper);
-
-    const mixer10 = new THREE.AnimationMixer(officer10);
-    mixer10.clipAction(gltf.animations[0]).play();
-
-
-    mixers.push(mixer1,mixer2,mixer3,mixer4,mixer5,mixer6,mixer7,mixer8,mixer9,mixer10)
-
-});
-
-let hyperbouton;
-
-const loader8 = makeGLTFLoader();
-
-loader8.load('public/hyperbouton.glb', (gltf)=>{
-    hyperbouton = gltf.scene;
-    hyperbouton.position.set(0,-12, 98.5);
-    hyperbouton.scale.set(10,10,10);
-    hyperbouton.rotation.y = Math.PI;
-    hyperbouton.traverse(obj => {
-    if (obj.isMesh) {
-        console.log("Mesh trouvé :", obj.name);
-    }
-});
-    worldGroup.add(hyperbouton);
-});
-
-
-
 
 let detectionMesh;
 const gltfLoader = makeGLTFLoader();
@@ -713,82 +492,7 @@ function checkGameReady() {
     }
 }
 
-const loader12 = makeGLTFLoader();
-
-loader12.load('public/tie_fighter0.glb', (gltf) => {
-    // Premier
-    const tiefighter0 = gltf.scene;
-    tiefighter0.name = "tie_fighter0";
-    tiefighter0.position.set(0, -12, 98.5);
-    tiefighter0.scale.set(8,8,8);
-    tiefighter0.rotation.y = -Math.PI;
-    worldGroup.add(tiefighter0);
-    ctx.hyperspace.objectsToFade.push(tiefighter0);
-    console.log(gltf.animations);
-
-
-    const mixer1 = new THREE.AnimationMixer(tiefighter0);
-    mixer1.clipAction(gltf.animations[0]).play();
-
-    if (gltf.animations.length > 0) {
-        const action = mixer1.clipAction(gltf.animations[0]);
-        action.play();
-        mixer1.alwaysUpdate = true;   // visible aussi de dehors
-        mixers.push(mixer1);
-}
-
-});
-
 const loader13 = makeGLTFLoader();
-
-loader13.load('public/droid1.glb', (gltf) => {
-    // Premier
-    const droid1 = gltf.scene;
-    droid1.position.set(0, -12, 98.5);
-    droid1.scale.set(10,10,10);
-    droid1.rotation.y = -Math.PI;
-    worldGroup.add(droid1);
-    // le droïde R5 se déplace (animation de son nœud racine) : on suit un de ses morceaux
-    droidBody = droid1.getObjectByName('Object_8');
-    console.log(gltf.animations);
-
-
-    const mixer1 = new THREE.AnimationMixer(droid1);
-    mixer1.clipAction(gltf.animations[0]).play();
-
-    if (gltf.animations.length > 0) {
-        const mixer1 = new THREE.AnimationMixer(droid1);
-        const action = mixer1.clipAction(gltf.animations[0]);
-        action.play();
-        mixers.push(mixer1);
-}
-
-});
-
-loader13.load('public/bb9.glb', (gltf) => {
-    // Premier
-    const bb9 = gltf.scene;
-    bb9.position.set(0, -12, 98.5);
-    bb9.scale.set(10,10,10);
-    bb9.rotation.y = -Math.PI;
-    worldGroup.add(bb9);
-    console.log(gltf.animations);
-
-
-    const mixer1 = new THREE.AnimationMixer(bb9);
-    mixer1.clipAction(gltf.animations[0]).play();
-
-    if (gltf.animations.length > 0) {
-        const mixer1 = new THREE.AnimationMixer(bb9);
-        const action = mixer1.clipAction(gltf.animations[0]);
-        action.play();
-        mixers.push(mixer1);
-}
-
-});
-
-
-
 
 let Table_3_Button_Panel_0;
 let Table_3_Button_Red_0;
@@ -1112,140 +816,6 @@ function updateWhiteButtonsNuanced(dt) {
         }
     });
 }
-// =============================================
-// BULLES INFO
-// =============================================
-// ================================
-// BULLES INFO POUR THREE.JS
-// ================================
-
-// 1️⃣ Fonction pour créer une bulle HTML
-function createInfoBubble(text, imageSrc) {
-
-    const container = document.createElement("div");
-
-    container.style.position = "fixed";
-    container.style.left = "20px";
-    container.style.bottom = "20px";
-    container.style.width = "350px";
-
-    container.style.display = "flex";
-    container.style.alignItems = "center";
-    container.style.gap = "15px";
-
-    container.style.padding = "15px";
-    container.style.background = "rgba(0,0,0,0.75)";
-    container.style.borderRadius = "12px";
-    container.style.color = "#FFE81F";
-    container.style.fontFamily = "StarJedi, sans-serif";
-    container.style.fontSize = "22px";
-    container.style.pointerEvents = "none";
-    container.style.display = "hidden";
-
-    // bordure dégradée
-    container.style.boxShadow = `
-    0 0 10px rgba(255,232,31,0.4),
-    0 0 20px rgba(255,232,31,0.2),
-    inset 0 0 20px rgba(255,232,31,0.15)
-    `;
-
-    // image
-    const img = document.createElement("img");
-    img.src = imageSrc;
-    img.style.width = "120px";
-    img.style.height = "auto";
-    img.style.marginRight = "15px";
-
-    // texte
-    const txt = document.createElement("div");
-    txt.innerHTML = text.replace(/\n/g, "<br>");
-    txt.style.flex = "1";
-    txt.style.fontFamily = "StarJedi";
-
-    container.appendChild(img);
-    container.appendChild(txt);
-
-    document.body.appendChild(container);
-
-    return container;
-}
-
-// 2️⃣ Crée les bulles
-const bubble1 = createInfoBubble(
-`#<span style="background:rgba(255,232,31,0.3); padding:2px 4px;">HoLoGRAM</span>#
-🟦 oN / oFF
-🟥 NExT`,
-"public/holoinfo.JPG"
-);
-const bubble2 = createInfoBubble(
-`#<span style="background:rgba(255,232,31,0.3); padding:2px 4px;"> @</span>#
-Click on 
-SCREEN for 
-PLAY FiLM`,
-"public/screen1_off.webp"
-);
-const bubble3 = createInfoBubble(
-`#<span style="background:rgba(255,232,31,0.3); padding:2px 4px;"> @</span>#
-Click on 
-SCREEN for 
-PLAY FiLM`,
-"public/screen3_off.jpeg"
-);
-const bubble4 = createInfoBubble(
-`⬛ Map
-⬜ Laser
-🟥 ALARM
-🟦 Hyperspace`,
-"public/controlinfo.JPG"
-);
-
-// 3️⃣ Définit les zones 3D autour du joueur
-const zones = [
-    { pos: new THREE.Vector3(0, -6, -5), size: 25, bubble: bubble1 },
-    { pos: new THREE.Vector3(-50, -6, 0), size: 20, bubble: bubble2 },
-    { pos: new THREE.Vector3(50, -6, 0), size: 20, bubble: bubble2 },
-    { pos: new THREE.Vector3(-50, -6, 60), size: 20, bubble: bubble3 },
-    { pos: new THREE.Vector3(50, -6, 60), size: 20, bubble: bubble3 },
-    { pos: new THREE.Vector3(0, -6, 145), size: 30, bubble: bubble4 }
-];
-
-const DEBUG_ZONES = false; // true = affiche les zones en rouge
-if (DEBUG_ZONES) {
-zones.forEach(zone => {
-    const geo = new THREE.BoxGeometry(zone.size*2, zone.size*2, zone.size*2);
-    const mat = new THREE.MeshBasicMaterial({color:0xff0000, wireframe:true});
-    const cube = new THREE.Mesh(geo, mat);
-    cube.position.copy(zone.pos);
-    scene.add(cube);
-});
-}
-
-// 4️⃣ Vérifie si le player est dans une zone
-function checkZones() {
-
-    // cacher toutes les bulles
-    bubble1.style.visibility = "hidden";
-    bubble2.style.visibility = "hidden";
-    bubble3.style.visibility = "hidden";
-    bubble4.style.visibility = "hidden";
-
-    zones.forEach(zone => {
-
-        const distance = player.position.distanceTo(zone.pos);
-
-        if (distance < zone.size) {
-
-            zone.bubble.style.visibility = "visible";
-
-            // position en bas gauche (fixe)
-            zone.bubble.style.left = "20px";
-            zone.bubble.style.bottom = "20px";
-        }
-
-    });
-}
-
-
 //************************************************************************** */
 
 // =====================================================
@@ -3020,171 +2590,6 @@ const capitalTemplates = [null, null, null];
     });
 });
 
-// ===================================================
-// LOAD JSON      JSON        JSON
-// ===================================================
-// Formes en binaire (x,y,z en Float32) : ~10 Mo au lieu de ~200 Mo de JSON.
-// Générées depuis les JSON d'origine par tools/holo-to-bin.mjs
-function loadShape(name) {
-    return fetch('public/holo/' + name + '.bin')
-        .then(r => r.ok ? r.arrayBuffer() : Promise.reject('File not found ' + name))
-        .then(buf => new Float32Array(buf));
-}
-
-const HOLO_SHAPES = ['empire', 'tiefighter', 'tieinterceptor', 'tiebomber', 'atst', 'atat',
-                     'stardestroyer', 'deathstar', 'darkmaul', 'darkvador', 'kylo', 'galaxy'];
-
-Promise.all(HOLO_SHAPES.map(loadShape)).then(list => {
-
-    // l'empire deux fois de suite pour le "battement" (comme avant)
-    const shapes = [list[0], ...list];
-
-    const maxCount = Math.max(...shapes.map(s => s.length / 3));
-
-    const formattedShapes = shapes.map(shape => {
-        const count = shape.length / 3;
-        const arr = new Float32Array(maxCount * 3);
-        for (let i = 0; i < maxCount; i++) {
-            const j = (i % count) * 3;
-            arr[i*3+0] = shape[j];
-            arr[i*3+1] = shape[j + 1];
-            arr[i*3+2] = shape[j + 2];
-        }
-        return arr;
-    });
-
-    initMorphSystem(formattedShapes, maxCount); // ✅ on passe la variable
-
-});
-
-
-function initMorphSystem(shapesArray, count){
-
-    shapes = shapesArray;
-
-    currentIndex = 0;
-    nextIndex = 1;
-
-    const geometry = new THREE.BufferGeometry();
-
-    positionAttr = new THREE.BufferAttribute(
-        shapes[currentIndex].slice(), 3
-    );
-
-    targetAttr = new THREE.BufferAttribute(
-        shapes[nextIndex].slice(), 3
-    );
-
-    // 🔥 seed obligatoire pour ton shader
-    const seed = new Float32Array(count);
-    for(let i=0;i<count;i++){
-        seed[i] = Math.random();
-    }
-
-    geometry.setAttribute('position', positionAttr);
-    geometry.setAttribute('target', targetAttr);
-    geometry.setAttribute('seed', new THREE.BufferAttribute(seed,1));
-
-    material = new THREE.ShaderMaterial({
-    transparent: true,
-    depthWrite: false,
-    blending: THREE.AdditiveBlending,
-
-    uniforms: {
-        morph: { value: 0 },
-        time: { value: 0 },
-        globalRotation: { value: 0 },
-        uOpacity: { value: 0 } // 👈 AJOUT
-    },
-
-    vertexShader: `
-    precision mediump float;
-    attribute vec3 target;
-    attribute float seed;
-    uniform float morph;
-    uniform float time;
-    uniform float globalRotation;
-
-    mat3 rotationY(float angle){
-        float s = sin(angle);
-        float c = cos(angle);
-        return mat3(
-            c, 0.0, -s,
-            0.0, 1.0, 0.0,
-            s, 0.0,  c
-        );
-    }
-
-    void main(){
-
-        // 1️⃣ Morph
-        vec3 pos = mix(position, target, morph);
-
-        // 2️⃣ Micro vibration holographique
-        float a = seed * 6.283185 + time * 1.5;
-        pos += vec3(
-            cos(a) * 0.03,
-            sin(a * 1.3) * 0.03,
-            sin(a * 0.7) * 0.03
-        );
-
-        // 3️⃣ Rotation globale Y
-        pos = rotationY(globalRotation) * pos;
-
-        // 4️⃣ Projection
-        vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
-        gl_Position = projectionMatrix * mvPosition;
-
-        // 5️⃣ Taille perspective
-        float perspective = 1.0 / -mvPosition.z;
-        gl_PointSize = clamp(18.0 * perspective, 1.5, 6.0);
-    }
-    `,
-
-    fragmentShader: `
-    precision mediump float;
-    uniform float time;
-    uniform float uOpacity;
-
-    void main(){
-
-        vec2 uv = gl_PointCoord - 0.5;
-        float d = length(uv);
-
-        float core = exp(-d*d*70.0);
-        float ring = exp(-d*d*18.0);
-        float halo = exp(-d*d*4.0);
-
-        vec3 color =
-            vec3(1.4,1.8,2.6)*core +
-            vec3(0.4,1.0,2.4)*ring +
-            vec3(0.12,0.45,1.6)*halo;
-
-        // scan hologramme
-        float scan = sin(gl_FragCoord.y * 0.1 + time*5.0)*0.1;
-        color += scan;
-
-        color = pow(color, vec3(0.85));
-
-        float alpha = halo * 0.65 * uOpacity;
-        gl_FragColor = vec4(color, alpha);
-    }
-    `
-});
-
-particleSystem = new THREE.Points(geometry, material);
-particleSystem.scale.set(0.3,0.3,0.3);
-particleSystem.position.set(0,1,0);
-particleSystem.visible = true; // on le laisse visible, on contrôle juste l'opacité
-scene.add(particleSystem);
-// (pas de bloom sur l'hologramme : ses particules brillent déjà, c'était trop)
-// (la boucle animate() est déjà lancée en bas du fichier : l'appeler ici
-//  créait une 2e boucle et tout tournait deux fois par image)
-}
-
-
-
-
 // =====================================================================================================================
 // DEPLACEMENT                      PLAYER                                                  CLAVIER
 // =====================================================================================================================
@@ -3328,8 +2733,7 @@ renderer.domElement.addEventListener('click', (event) => {
 
 // Dans ton click handler
 if (clickedObject.name.includes("Table_3_Button_Blue_0")) {
-    hologramActive = !hologramActive;
-    hologramTarget = hologramActive ? 1 : 0;
+    const hologramActive = ctx.hologram.toggle();
     
     // Active/désactive le chase du bouton rouge
     chaseActive = hologramActive;
@@ -3365,7 +2769,7 @@ if (clickedObject.name.includes("Table_3_Button_Blue_0")) {
             }
 
         if (clickedObject.name.includes("Object_8")) {
-            if (droidBody) playAt(sfx.r2, droidBody.getWorldPosition(new THREE.Vector3()), 1, 0.2); else playSoundSafe(R2);
+            ctx.decor.droidClicked();
         }
 
         
@@ -3397,7 +2801,7 @@ if (clickedObject.name.includes("Side_Control_Panels_Button_White_0001")) {
 
         // Vérifier si c’est ton bouton rouge
         if (clickedObject.name.includes("Table_3_Button_Red_0")) {
-            onButtonClick(); // Appelle la fonction de gestion du clic
+            ctx.hologram.next(); // forme suivante
             transittionsound.stop(); // Arrêter le son s'il est en cours de lecture
             transittionsound.play();
         }
@@ -3450,7 +2854,7 @@ if (clickedObject.name.includes("Side_Control_Panels_Button_White_0001")) {
             }
 
         if (clickedObject.name.includes("Object_8")) {
-            if (droidBody) playAt(sfx.r2, droidBody.getWorldPosition(new THREE.Vector3()), 1, 0.2); else playSoundSafe(R2);
+            ctx.decor.droidClicked();
         }
 
         
@@ -3719,20 +3123,6 @@ renderer.domElement.addEventListener("mousemove", (event) => {
 });
 
 
-let shapes;
-let positionAttr;
-let targetAttr;
-
-let currentIndex = 0;
-let nextIndex = 1;
-let morphSpeed = 0.4;
-let morphState = "morph"; // "morph" ou "pause"
-let pauseTimer = 0;
-
-const morphDuration = 2.0;   // durée du morph
-const pauseDuration = 5.0;   // durée de pause
-
-
 // =======================================================================
 // ENTER / EXIT SHIP
 //========================================================================
@@ -3813,56 +3203,8 @@ console.log("Player:", player.position);
 console.log("Detection:", detectionBox);
 
 
-// ------------------------------------------------------------
-// Fonction morph suivant avec bouton
-// ------------------------------------------------------------
-function onButtonClick() {
-    if (!material || !positionAttr || !targetAttr) return;
-
-    // Préparer la prochaine forme
-    positionAttr.array.set(targetAttr.array);
-    positionAttr.needsUpdate = true;
-
-    currentIndex = nextIndex;
-    nextIndex = (nextIndex + 1) % shapes.length;
-
-    targetAttr.array.set(shapes[nextIndex]);
-    targetAttr.needsUpdate = true;
-
-    // Reset morph pour lancer la transition
-    material.uniforms.morph.value = 0;
-    morphState = "morph";
-}
-
-
-
-
-
-
 // Toutes les explosions GLSL font du bruit, là où elles ont lieu (voir src/audio.js)
 audio.attachExplosionSounds(fx);
-const _cameraWorld = new THREE.Vector3();
-
-// ---------------- Bips du droïde quand il passe près de la caméra ----------------
-let droidBody = null;
-let droidBeepCooldown = 0;
-let droidWasNear = false;
-const _droidPos = new THREE.Vector3();
-const DROID_NEAR = 60;          // distance à partir de laquelle il "parle"
-
-function updateDroidBeeps(dt) {
-    if (!droidBody || !state.isInsideShip) return;
-    droidBody.getWorldPosition(_droidPos);
-    camera.getWorldPosition(_cameraWorld);
-    const near = _droidPos.distanceTo(_cameraWorld) < DROID_NEAR;
-    droidBeepCooldown -= dt;
-    // un bip en arrivant près de nous, puis de temps en temps tant qu'il reste proche
-    if (near && (!droidWasNear || droidBeepCooldown <= 0) && droidBeepCooldown <= 1.5) {
-        playAt(sfx.r2, _droidPos, 1, 0.5);
-        droidBeepCooldown = 4 + Math.random() * 4;
-    }
-    droidWasNear = near;
-}
 
 // =========================================================================================
 // BLOOM (halo lumineux) — uniquement sur les objets "lumineux"
@@ -3882,9 +3224,6 @@ landingBeacon.traverse(o => o.layers.enable(BLOOM_LAYER));
 // Bouton de volume (voir src/ui/volume.js)
 initVolumeControl(audio, [ctx.hyperspace.video, ...ctx.screens.videos, ctx.mapScreen.video]);
 
-const INTERIOR_CENTER = new THREE.Vector3(0, 0, 30);
-const INTERIOR_RANGE = 450;
-let interiorWasOn = true;
 
 let envBlink = 0;
 let envToggle = false;
@@ -3921,35 +3260,12 @@ function animate(){
         currentFlightSpeed = 12; // le TIE repart doucement à la sortie du hangar
     }
 
-    if (!material) return;
+    if (!ctx.hologram.ready()) return;
 
-    // Mettre à jour le temps pour d'autres effets éventuels
-    material.uniforms.time.value += dt;
-
-    // Si une morph est en cours, on incrémente la progression
-    if (morphState === "morph") {
-        material.uniforms.morph.value += dt / morphDuration;
-
-        if (material.uniforms.morph.value >= 1) {
-            material.uniforms.morph.value = 1;
-            morphState = "done"; // Transition terminée
-        }
-    }
-
-    // Intérieur de la passerelle (16 personnages animés, droïdes, portes…) : inutile de
-    // l'animer et de le dessiner quand on vole loin de la tour, il est invisible de là.
-    const interiorOn = state.isInsideShip || player.position.distanceToSquared(INTERIOR_CENTER) < INTERIOR_RANGE * INTERIOR_RANGE;
-    if (interiorOn !== interiorWasOn) {
-        interiorWasOn = interiorOn;
-        for (const child of worldGroup.children) {
-            if (child.name !== 'tie_fighter0' && child.name !== 'bridge_shell') child.visible = interiorOn;
-        }
-    }
-    mixers.forEach(m => { if (interiorOn || m.alwaysUpdate) m.update(dt); });
+    ctx.hologram.update(dt, k);
+    ctx.decor.update(dt, player.position);
 
     ctx.destroyers.update(k);
-    material.uniforms.time.value += dt;
-    material.uniforms.globalRotation.value += dt * 0.2;
     if (autopilot.active) updateAutopilot(dt);
     else updateCamera(dt);
     updateLanding(dt);
@@ -3960,18 +3276,6 @@ function animate(){
         ctx.hyperspace.update(k);
     }
     ctx.doors.update(k);
-    
-
-    // ===== Hologram Fade =====
-    if (material) {
-        hologramOpacity = THREE.MathUtils.lerp(
-            hologramOpacity,
-            hologramTarget,
-            1 - Math.pow(1 - hologramFadeSpeed, k)
-        );
-
-    material.uniforms.uOpacity.value = hologramOpacity;
-    }
     
 
     // ======= Levitation TIE PLAYER =====================
@@ -4099,10 +3403,10 @@ if (!alarmActive) {
 
     updateWhiteButtonsNuanced(dt);
 
-    checkZones();
+    ctx.infoBubbles.update(player.position);
     
 
-    updateDroidBeeps(dt);
+    ctx.decor.updateDroidBeeps(dt);
 
     bloom.render();
 
