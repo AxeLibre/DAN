@@ -58,24 +58,18 @@ export function initAudio(scene, camera) {
         tieOn:           loadSound(audioLoader, listener3, 'public/tie_on.WAV', 0.9),
         tieOff:          loadSound(audioLoader, listener3, 'public/tie_off.mp3', 0.9),
         open:            loadSound(audioLoader, listener3, 'public/open.mp3', 0.9),
-        transittionsound: loadSound(audioLoader, listener3, 'public/transition.mp3', 0.9)
-    };
-    // ⚠️ ces 3 bips sont remplacés un peu plus bas par d'autres fichiers : ils ne sont jamais entendus
-    sounds.button1 = loadSound(audioLoader, listener3, 'public/bipbip1.WAV', 0.9);
-    sounds.button2 = loadSound(audioLoader, listener3, 'public/bipbip2.WAV', 0.9);
-    sounds.button3 = loadSound(audioLoader, listener3, 'public/bipbip3.mp3', 0.9);
-    Object.assign(sounds, {
+        transittionsound: loadSound(audioLoader, listener3, 'public/transition.mp3', 0.9),
         tiechange:       loadSound(audioLoader, listener3, 'public/tiechange.WAV', 1.0),
         laseron:         loadSound(audioLoader, listener3, 'public/laseron.mp3', 2.0),
         laseroff:        loadSound(audioLoader, listener3, 'public/laseroff.mp3', 2.0),
         explosion:       loadSound(audioLoader, listener3, 'public/explosion.mp3', 2.0),
         boom:            loadSound(audioLoader, listener3, 'public/boom.mp3', 2.0),
         doorSound:       loadSound(audioLoader, listener3, 'public/door.mp3', 0.5),    // son des portes
-        button2:         loadSound(audioLoader, listener3, 'public/bipbip6.WAV', 2.0),
-        button1:         loadSound(audioLoader, listener3, 'public/bipbip1.WAV', 2.0),
-        button3:         loadSound(audioLoader, listener3, 'public/sounds/button0.mp3', 2.0),
+        button1:         loadSound(audioLoader, listener3, 'public/bipbip1.WAV', 2.0),         // boutons rouges
+        button2:         loadSound(audioLoader, listener3, 'public/bipbip6.WAV', 2.0),         // boutons blancs
+        button3:         loadSound(audioLoader, listener3, 'public/sounds/button0.mp3', 2.0),  // boutons bleus
         metalCollisionSound: loadSound(audioLoader, listener, 'public/sounds/metal_impact.mp3', 0.8)   // collision métallique
-    });
+    };
 
     // 🎧 Son R2
     const listener4 = new THREE.AudioListener();
