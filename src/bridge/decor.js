@@ -108,7 +108,7 @@ export function initDecor(ctx) {
         tiefighter0.scale.set(8,8,8);
         tiefighter0.rotation.y = -Math.PI;
         worldGroup.add(tiefighter0);
-        ctx.hyperspace.objectsToFade.push(tiefighter0);
+        ctx.hyperspace.addFadingObject(tiefighter0);   // glisse et s'estompe pendant le saut
         console.log(gltf.animations);
 
 

@@ -72,18 +72,15 @@ export function initHyperspace(ctx) {
         worldGroup.add(hyperscreen);
     });
 
-    // objets qui glissent et s'estompent pendant le saut
+    // objets qui glissent et s'estompent pendant le saut (position de départ mémorisée)
     const objectsToFade = [];
-
-    const tie = scene.getObjectByName("tie_fighter0");
-    const pivot2 = scene.getObjectByName("pivot");
-
-    if (tie) objectsToFade.push(tie);
-    if (pivot2) objectsToFade.push(pivot2);
-
-    objectsToFade.forEach(obj => {
+    function addFadingObject(obj) {
         obj.userData.originalPosition = obj.position.clone();
-    });
+        objectsToFade.push(obj);
+    }
+
+    const pivot = scene.getObjectByName("pivot");   // destroyers en orbite
+    if (pivot) addFadingObject(pivot);
 
     // clic sur le bouton "Hyperspace"
     function start() {
@@ -192,5 +189,5 @@ export function initHyperspace(ctx) {
         }
     }
 
-    return { video, fade, objectsToFade, start, update };
+    return { video, fade, addFadingObject, start, update };
 }
