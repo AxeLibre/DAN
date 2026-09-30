@@ -6,7 +6,8 @@ import { HOLO_SHAPES } from './hologram.js';
 // =========================================================================================
 // Quand l'hologramme s'allume, le premier modèle apparaît d'abord, puis ce panneau
 // glisse depuis le bas de l'écran. Chaque vignette est dessinée avec les points de la
-// forme elle-même (même lumière bleue que l'hologramme). Visible seulement près de la table.
+// forme elle-même (même lumière bleue que l'hologramme). Visible seulement près de la table,
+// sur le côté droit de l'écran pour ne pas cacher l'hologramme.
 const OPEN_DELAY = 1.2;                               // secondes après l'allumage
 const TABLE = new THREE.Vector3(0, -6, -5);           // table de l'hologramme
 const NEAR = 70;                                      // distance à laquelle le menu reste ouvert
@@ -14,20 +15,21 @@ const THUMB = 144;                                    // vignettes dessinées en
 
 const CSS = `
 #holo-menu {
-    position: fixed; left: 50%; bottom: 18px; z-index: 99990;
-    width: min(760px, calc(100vw - 32px)); padding: 14px 18px 16px;
+    position: fixed; right: 18px; top: 50%; z-index: 99990;
+    width: 200px; max-height: calc(100vh - 40px); overflow-y: auto; padding: 14px 12px 14px;
     font-family: Orbitron, 'Segoe UI', sans-serif; color: #cfefff;
     background: linear-gradient(180deg, rgba(6, 22, 40, .82), rgba(2, 10, 20, .9));
     border: 1px solid rgba(90, 200, 255, .55); border-radius: 14px;
     box-shadow: 0 0 30px rgba(40, 160, 255, .35), inset 0 0 40px rgba(40, 160, 255, .12);
     backdrop-filter: blur(6px);
-    transform: translate(-50%, 130%); opacity: 0; pointer-events: none;
+    transform: translate(130%, -50%); opacity: 0; pointer-events: none;
     transition: transform .6s cubic-bezier(.2, .9, .2, 1), opacity .4s ease;
     overflow: hidden;
 }
-#holo-menu.open { transform: translate(-50%, 0); opacity: 1; pointer-events: auto; }
+#holo-menu.open { transform: translate(0, -50%); opacity: 1; pointer-events: auto; }
+#holo-menu::-webkit-scrollbar { width: 0; }
 #holo-menu::before {                                   /* balayage lumineux */
-    content: ''; position: absolute; left: -40%; top: 0; width: 40%; height: 100%;
+    content: ''; position: absolute; left: -40%; top: 0; width: 40%; height: 100%; z-index: 1;
     background: linear-gradient(90deg, transparent, rgba(120, 220, 255, .12), transparent);
     animation: holo-sweep 4.5s linear infinite; pointer-events: none;
 }
@@ -36,20 +38,20 @@ const CSS = `
     background: repeating-linear-gradient(180deg, rgba(120, 220, 255, .08) 0 1px, transparent 1px 3px);
 }
 @keyframes holo-sweep { to { left: 110%; } }
-#holo-menu .head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px; }
+#holo-menu .head { display: flex; flex-direction: column; align-items: center; gap: 4px; margin-bottom: 12px; }
 #holo-menu .title { font-size: 13px; font-weight: 700; letter-spacing: .35em; color: #8fdcff;
     text-shadow: 0 0 10px rgba(60, 190, 255, .9); }
 #holo-menu .hint { font-size: 10px; letter-spacing: .2em; opacity: .6; }
-#holo-menu .grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; }
+#holo-menu .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
 #holo-menu .card {
     position: relative; cursor: pointer; padding: 4px 2px 6px; border-radius: 8px; text-align: center;
     background: rgba(20, 70, 110, .18); border: 1px solid rgba(90, 200, 255, .2);
     transition: transform .2s ease, background .2s ease, border-color .2s ease, box-shadow .2s ease;
-    opacity: 0; transform: translateY(12px);
+    opacity: 0; transform: translateX(16px);
 }
 #holo-menu.open .card { animation: holo-card-in .45s cubic-bezier(.2, .9, .2, 1) forwards; }
-@keyframes holo-card-in { to { opacity: 1; transform: translateY(0); } }
-#holo-menu .card:hover { transform: translateY(-4px); background: rgba(40, 130, 200, .3);
+@keyframes holo-card-in { to { opacity: 1; transform: translateX(0); } }
+#holo-menu .card:hover { transform: translateX(-4px); background: rgba(40, 130, 200, .3);
     border-color: rgba(140, 225, 255, .8); box-shadow: 0 0 16px rgba(60, 190, 255, .6); }
 #holo-menu .card.active { border-color: #7fe2ff; background: rgba(40, 150, 230, .32);
     box-shadow: 0 0 18px rgba(80, 210, 255, .8), inset 0 0 14px rgba(80, 210, 255, .35);
@@ -58,7 +60,7 @@ const CSS = `
 #holo-menu canvas { width: 72px; height: 72px; display: block; margin: 0 auto; }
 #holo-menu .label { font-size: 9px; letter-spacing: .12em; text-transform: uppercase; white-space: nowrap;
     overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
-@media (max-width: 640px) { #holo-menu .grid { grid-template-columns: repeat(4, 1fr); } }
+@media (max-height: 620px) { #holo-menu canvas { width: 54px; height: 54px; } }
 `;
 
 // Vignette : la forme vue de 3/4, en points bleus lumineux

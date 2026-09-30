@@ -8,84 +8,119 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&display=swap" rel="stylesheet">
     <style>
-      body { margin: 0; overflow: hidden; }
-      
-    #loadingScreen {
-        position: fixed;
-        inset: 0;
-        background: url("./public/loadingbg.jpg") center center / cover no-repeat;
-        animation: slowZoom 20s infinite alternate;
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
-        align-items: center;
-        z-index: 9999;
-        transition: opacity 1s ease;
-    }
+      body { margin: 0; overflow: hidden; background: #000; }
 
-    @keyframes slowZoom {
-    from { background-size: 133%; }
-    to   { background-size: 100%; }
-}
+      /* ================= ÉCRAN DE CHARGEMENT ================= */
+      #loadingScreen {
+        position: fixed; inset: 0; z-index: 9999; overflow: hidden;
+        display: flex; flex-direction: column; justify-content: space-between; align-items: center;
+        background: #000;
+        transition: opacity 1s ease, transform 1.2s ease, filter 1s ease;
+      }
+      #loadingScreen.done { opacity: 0; transform: scale(1.06); filter: blur(6px); }
 
-    #loadingImage {
-      position: center;
-        max-width: 400px;
-        margin-bottom: 5px;
-    }
+      /* fond : le destroyer, qui zoome très lentement */
+      #loadingScreen .bg {
+        position: absolute; inset: -4%;
+        background: url("./public/loadingbg.jpg") center / cover no-repeat;
+        animation: bgZoom 24s ease-in-out infinite alternate;
+      }
+      @keyframes bgZoom { from { transform: scale(1.12); } to { transform: scale(1); } }
+      /* vignettage + lignes de balayage + reflet qui passe */
+      #loadingScreen .vignette {
+        position: absolute; inset: 0; pointer-events: none;
+        background:
+          radial-gradient(ellipse at 50% 45%, rgba(0,0,0,0) 35%, rgba(0,0,0,.55) 75%, rgba(0,0,0,.92) 100%),
+          linear-gradient(180deg, rgba(0,0,0,.35), rgba(0,0,0,0) 30%, rgba(0,0,0,0) 60%, rgba(0,0,0,.8));
+      }
+      #loadingScreen .scan {
+        position: absolute; inset: 0; pointer-events: none; opacity: .18;
+        background: repeating-linear-gradient(180deg, rgba(255,255,255,.07) 0 1px, transparent 1px 3px);
+      }
+      #loadingScreen .sweep {
+        position: absolute; top: 0; bottom: 0; width: 30%; left: -40%; pointer-events: none;
+        background: linear-gradient(100deg, transparent, rgba(255,232,31,.08), transparent);
+        animation: sweep 6s ease-in-out infinite;
+      }
+      @keyframes sweep { 0% { left: -40%; } 60%, 100% { left: 120%; } }
 
-    #loadingText {
-        color: rgb(221, 218, 10);
-        font-size: 72px;
-        font-family: 'Space Grotesk', system-ui, sans-serif;
-        text-shadow: 0 1px 2px rgba(255, 215, 150, 0.497);
-        animation: pulse 1.5s infinite;
-    }
+      /* titre et crédits : deux morceaux de la même image (public/loading3.png) */
+      #loadingImage, #loadingCredits { position: relative; background: url("./public/loading3.png") no-repeat; background-size: 100% auto; }
+      #loadingImage {                              /* titre : haut de l'image (0 → 22 %) */
+        margin-top: 5vh; width: min(620px, 80vw); aspect-ratio: 1021 / 225; background-position: 0 0;
+        filter: drop-shadow(0 0 18px rgba(255, 210, 60, .5));
+        animation: logoIn 1.4s cubic-bezier(.2,.9,.2,1) both, logoFloat 6s ease-in-out 1.4s infinite;
+      }
+      #loadingCredits {                            /* crédits : bas de l'image (80 → 99 %) */
+        width: min(260px, 50vw); aspect-ratio: 1021 / 194; background-position: 0 99.4%;
+        margin-bottom: 3vh; opacity: .8; animation: logoIn 1.2s .6s cubic-bezier(.2,.9,.2,1) both;
+      }
+      #loadingBottom { position: relative; display: flex; flex-direction: column; align-items: center; gap: 4vh; }
+      @keyframes logoIn { from { opacity: 0; transform: translateY(-20px) scale(.96); filter: blur(8px); } }
+      @keyframes logoFloat { 50% { transform: translateY(-8px); } }
 
-    @keyframes pulse {
-        0% { opacity: 0.3; }
-        50% { opacity: 1; }
-        100% { opacity: 0.3; }
-    }
+      /* barre de progression */
+      #loadingPanel {
+        position: relative; width: min(520px, 82vw);
+        font-family: Orbitron, 'Segoe UI', sans-serif; color: #fff4b0;
+        animation: logoIn 1.2s .3s cubic-bezier(.2,.9,.2,1) both;
+      }
+      #loadingPanel .row { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px; }
+      #loadingText { font-size: 13px; font-weight: 700; letter-spacing: .45em; text-shadow: 0 0 12px rgba(255,210,60,.8); }
+      #loadingPercent { font-size: 22px; font-weight: 900; letter-spacing: .08em; text-shadow: 0 0 14px rgba(255,210,60,.9); }
+      #loadingBar {
+        position: relative; height: 4px; border-radius: 2px; overflow: visible;
+        background: rgba(255, 232, 31, .12); box-shadow: 0 0 10px rgba(255, 200, 40, .15) inset;
+      }
+      #loadingFill {
+        position: absolute; left: 0; top: 0; bottom: 0; width: 0%; border-radius: 2px;
+        background: linear-gradient(90deg, #7a5a00, #ffd23a 70%, #fff9d9);
+        box-shadow: 0 0 12px #ffc629, 0 0 26px rgba(255, 170, 0, .6);
+        transition: width .35s ease;
+      }
+      #loadingFill::after {                     /* tête lumineuse */
+        content: ''; position: absolute; right: -6px; top: 50%; width: 12px; height: 12px; margin-top: -6px;
+        border-radius: 50%; background: #fff; box-shadow: 0 0 12px #fff, 0 0 26px #ffd23a;
+      }
+      #loadingStatus {
+        margin-top: 12px; font-size: 11px; letter-spacing: .22em; opacity: .75; min-height: 1.2em;
+        transition: opacity .35s ease;
+      }
+      #loadingScreen.ready #loadingText { color: #fff; }
 
-    #playButton {
-        position: fixed;
-        background: linear-gradient(
-    135deg,
-    rgba(49, 60, 63, 0.18),
-    rgba(205, 205, 205, 0.18)
-  );
-        inset: 0;
-        margin: auto;
-        width: 200px;
-        height: 80px;
-        font-size: 24px;
-        font-family: 'Space Grotesk', system-ui, sans-serif;
-        color: rgb(0, 255, 38);
-        border: 2px solid white;
-        cursor: pointer;
-        display: none;
-        z-index: 10000;
-        text-shadow: 0 1px 2px rgba(79, 255, 100, 0.537);
-        transition: all 0.3s ease;
-    }
-
-    #playButton:hover {
-    background: white;
-    color: black;
-
-    box-shadow: 
-        0 0 10px rgb(43, 255, 0),
-        0 0 20px rgb(68, 255, 0),
-        0 0 40px rgb(77, 255, 0);
-
-    transform: scale(1.05);
-}
-
-#playButton:active {
-    transform: scale(0.95);
-}
-
+      /* ================= BOUTON PLAY ================= */
+      #playButton {
+        position: fixed; inset: 0; margin: auto; width: 240px; height: 84px; z-index: 10000;
+        display: none; cursor: pointer; border: none; padding: 0; background: none;
+        font-family: Orbitron, 'Segoe UI', sans-serif; font-size: 30px; font-weight: 900; letter-spacing: .45em;
+        text-indent: .45em; color: #fff7cf;
+        text-shadow: 0 0 10px rgba(255, 215, 80, .9), 0 0 24px rgba(255, 170, 0, .6);
+        border-radius: 14px; isolation: isolate;
+        animation: playIn .9s cubic-bezier(.2,.9,.2,1) both, playPulse 2.4s ease-in-out .9s infinite;
+        transition: transform .25s ease, color .25s ease;
+      }
+      /* bordure dorée qui tourne */
+      #playButton::before {
+        content: ''; position: absolute; inset: -2px; border-radius: 16px; z-index: -2;
+        background: conic-gradient(from var(--spin, 0deg), #6b4c00, #ffd23a, #fff4c4, #ffb300, #6b4c00 60%, #ffd23a);
+        animation: spin 3.5s linear infinite;
+      }
+      /* intérieur vitré + reflet au survol */
+      #playButton::after {
+        content: ''; position: absolute; inset: 2px; border-radius: 12px; z-index: -1;
+        background:
+          linear-gradient(110deg, transparent 30%, rgba(255,255,255,.18) 45%, transparent 60%) -200% 0 / 250% 100% no-repeat,
+          radial-gradient(ellipse at 50% 0%, rgba(255, 210, 80, .25), transparent 70%),
+          linear-gradient(180deg, rgba(30, 24, 8, .88), rgba(8, 6, 2, .94));
+        transition: background-position .8s ease;
+      }
+      @property --spin { syntax: '<angle>'; inherits: false; initial-value: 0deg; }
+      @keyframes spin { to { --spin: 360deg; } }
+      @keyframes playIn { from { opacity: 0; transform: scale(.7); filter: blur(10px); } }
+      @keyframes playPulse { 50% { box-shadow: 0 0 34px rgba(255, 190, 40, .55), 0 0 90px rgba(255, 150, 0, .25); } }
+      #playButton:hover { transform: scale(1.06); color: #fff; }
+      #playButton:hover::after { background-position: 200% 0, 0 0, 0 0; }
+      #playButton:active { transform: scale(.96); }
     </style>
   </head>
   <body>
@@ -99,8 +134,19 @@
     </script>
     <script type="module" src="src/main.js"></script>
     <div id="loadingScreen">
-      <img src="./public/loading3.png" id="loadingImage" />
-      <div id="loadingText">LOADING...</div>
+      <div class="bg"></div>
+      <div class="vignette"></div>
+      <div class="scan"></div>
+      <div class="sweep"></div>
+      <div id="loadingImage" role="img" aria-label="Le Destroyer de DAN"></div>
+      <div id="loadingBottom">
+        <div id="loadingPanel">
+          <div class="row"><span id="loadingText">CHARGEMENT</span><span id="loadingPercent">0 %</span></div>
+          <div id="loadingBar"><div id="loadingFill"></div></div>
+          <div id="loadingStatus">Allumage des réacteurs…</div>
+        </div>
+        <div id="loadingCredits" role="img" aria-label="Made with love by Axel — Lucasfilm"></div>
+      </div>
     </div>
 
     <button id="playButton">PLAY</button>

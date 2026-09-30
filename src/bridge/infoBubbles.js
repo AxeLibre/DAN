@@ -4,48 +4,53 @@ import * as THREE from 'three';
 // BULLES INFO : aide affichée en bas à gauche quand le joueur approche d'une zone
 // ================================
 
+// Style des bulles : panneau vitré, liseré doré animé, reflet ; apparition en glissant
+const CSS = `
+.info-bubble {
+    position: fixed; left: 20px; bottom: 20px; width: 350px; z-index: 9000;
+    display: flex; align-items: center; gap: 15px; padding: 14px 16px;
+    color: #FFE81F; font-family: StarJedi, sans-serif; font-size: 22px; pointer-events: none;
+    border-radius: 14px; overflow: hidden; isolation: isolate;
+    background: linear-gradient(135deg, rgba(20, 16, 4, .82), rgba(4, 4, 8, .86));
+    backdrop-filter: blur(6px);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, .55), 0 0 18px rgba(255, 232, 31, .25), inset 0 0 22px rgba(255, 232, 31, .1);
+    opacity: 0; transform: translateX(-24px) scale(.97); filter: blur(4px);
+    transition: opacity .45s ease, transform .55s cubic-bezier(.2, .9, .2, 1), filter .45s ease;
+}
+.info-bubble.show { opacity: 1; transform: none; filter: none; }
+.info-bubble::before {                     /* liseré doré qui tourne */
+    content: ''; position: absolute; inset: 0; border-radius: 14px; padding: 1.5px; z-index: -1;
+    background: conic-gradient(from var(--bubble-spin, 0deg), rgba(255, 232, 31, .15), #ffe81f, rgba(255, 232, 31, .15) 40%, rgba(255, 180, 0, .7) 70%, rgba(255, 232, 31, .15));
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor; mask-composite: exclude;
+    animation: bubble-spin 5s linear infinite;
+}
+.info-bubble::after {                      /* reflet qui passe à l'apparition */
+    content: ''; position: absolute; top: 0; bottom: 0; width: 45%; left: -60%; z-index: 1;
+    background: linear-gradient(100deg, transparent, rgba(255, 245, 190, .18), transparent);
+}
+.info-bubble.show::after { animation: bubble-shine 1.1s .15s ease-out; }
+@property --bubble-spin { syntax: '<angle>'; inherits: false; initial-value: 0deg; }
+@keyframes bubble-spin { to { --bubble-spin: 360deg; } }
+@keyframes bubble-shine { from { left: -60%; } to { left: 120%; } }
+.info-bubble img { width: 120px; height: auto; border-radius: 8px; box-shadow: 0 0 12px rgba(255, 232, 31, .3); }
+.info-bubble .txt { flex: 1; line-height: 1.25; text-shadow: 0 0 10px rgba(255, 232, 31, .45); }
+`;
+
 // 1️⃣ Fonction pour créer une bulle HTML
 function createInfoBubble(text, imageSrc) {
 
     const container = document.createElement("div");
-
-    container.style.position = "fixed";
-    container.style.left = "20px";
-    container.style.bottom = "20px";
-    container.style.width = "350px";
-
-    container.style.display = "flex";
-    container.style.alignItems = "center";
-    container.style.gap = "15px";
-
-    container.style.padding = "15px";
-    container.style.background = "rgba(0,0,0,0.75)";
-    container.style.borderRadius = "12px";
-    container.style.color = "#FFE81F";
-    container.style.fontFamily = "StarJedi, sans-serif";
-    container.style.fontSize = "22px";
-    container.style.pointerEvents = "none";
-    container.style.display = "hidden";
-
-    // bordure dégradée
-    container.style.boxShadow = `
-    0 0 10px rgba(255,232,31,0.4),
-    0 0 20px rgba(255,232,31,0.2),
-    inset 0 0 20px rgba(255,232,31,0.15)
-    `;
+    container.className = "info-bubble";
 
     // image
     const img = document.createElement("img");
     img.src = imageSrc;
-    img.style.width = "120px";
-    img.style.height = "auto";
-    img.style.marginRight = "15px";
 
     // texte
     const txt = document.createElement("div");
+    txt.className = "txt";
     txt.innerHTML = text.replace(/\n/g, "<br>");
-    txt.style.flex = "1";
-    txt.style.fontFamily = "StarJedi";
 
     container.appendChild(img);
     container.appendChild(txt);
@@ -68,6 +73,10 @@ export function loadStarJediFont() {
 }
 
 export function initInfoBubbles(ctx) {
+    const style = document.createElement('style');
+    style.textContent = CSS;
+    document.head.appendChild(style);
+
     // 2️⃣ Crée les bulles
     const bubble1 = createInfoBubble(
 `#<span style="background:rgba(255,232,31,0.3); padding:2px 4px;">HoLoGRAM</span>#
@@ -118,31 +127,16 @@ PLAY FiLM`,
         });
     }
 
-    // 4️⃣ Vérifie si le player est dans une zone
+    // 4️⃣ Vérifie si le player est dans une zone : une bulle apparaît / disparaît en douceur
+    const bubbles = [bubble1, bubble2, bubble3, bubble4];
     function checkZones(playerPosition) {
-
-        // cacher toutes les bulles
-        bubble1.style.visibility = "hidden";
-        bubble2.style.visibility = "hidden";
-        bubble3.style.visibility = "hidden";
-        bubble4.style.visibility = "hidden";
-
+        const visible = new Set();
         zones.forEach(zone => {
-
-            // le menu de l'hologramme remplace sa bulle d'aide quand il est ouvert
-            if (zone.bubble === bubble1 && ctx.hologramMenu && ctx.hologramMenu.isOpen()) return;
-
-            const distance = playerPosition.distanceTo(zone.pos);
-
-            if (distance < zone.size) {
-
-                zone.bubble.style.visibility = "visible";
-
-                // position en bas gauche (fixe)
-                zone.bubble.style.left = "20px";
-                zone.bubble.style.bottom = "20px";
-            }
-
+            if (playerPosition.distanceTo(zone.pos) < zone.size) visible.add(zone.bubble);
+        });
+        bubbles.forEach(b => {
+            const show = visible.has(b);
+            if (b.classList.contains('show') !== show) b.classList.toggle('show', show);
         });
     }
 
