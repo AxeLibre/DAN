@@ -46,6 +46,7 @@ export function initMapScreen(ctx) {
 
         if (ctrlScreenVisible) {
             ctrlScreenFadeDirection = -1; // fade out
+            ctrlscreenoff.play()
         } else {
             ctrlScreenFadeDirection = 1; // fade in
             ctrlscreen.play(); // démarre la vidéo si on l'allume
@@ -53,7 +54,6 @@ export function initMapScreen(ctx) {
         }
 
         ctrlScreenVisible = !ctrlScreenVisible;
-        ctrlscreenoff.play()
     }
 
     function updateCtrlScreenFade(dt) {
