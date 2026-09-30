@@ -3260,8 +3260,6 @@ function animate(){
         currentFlightSpeed = 12; // le TIE repart doucement à la sortie du hangar
     }
 
-    if (!ctx.hologram.ready()) return;
-
     ctx.hologram.update(dt, k);
     ctx.decor.update(dt, player.position);
 

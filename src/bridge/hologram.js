@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { loadingManager } from '../core/loaders.js';
 
 // =========================================================================================
 // HOLOGRAMME EN PARTICULES (table centrale de la passerelle)
@@ -37,6 +38,10 @@ export function initHologram(ctx) {
     let hologramOpacity = 0;     // valeur actuelle
     let hologramTarget = 0;      // 0 ou 1
 
+    // fetch ne passe pas par les chargeurs de three.js : on prévient l'écran de chargement,
+    // pour que le bouton PLAY attende aussi l'hologramme
+    loadingManager.itemStart('hologram');
+
     Promise.all(HOLO_SHAPES.map(loadShape)).then(list => {
 
         // l'empire deux fois de suite pour le "battement" (comme avant)
@@ -58,7 +63,7 @@ export function initHologram(ctx) {
 
         initMorphSystem(formattedShapes, maxCount); // ✅ on passe la variable
 
-    });
+    }).finally(() => loadingManager.itemEnd('hologram'));
 
     function initMorphSystem(shapesArray, count){
 
@@ -239,5 +244,5 @@ export function initHologram(ctx) {
         morphState = "morph";
     }
 
-    return { ready: () => !!material, update, toggle, next };
+    return { update, toggle, next };
 }
