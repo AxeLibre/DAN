@@ -15,9 +15,9 @@ const CAPACITY = 110;                 // rochers max par forme
 const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _s = new THREE.Vector3();
 
 export const TIERS = [
-    { name: 'petit', radius: [7, 11],  hits: 1, speed: [120, 150], children: 0, damage: 2.5 },
-    { name: 'moyen', radius: [18, 26], hits: 2, speed: [95, 120],  children: 3, damage: 6 },
-    { name: 'gros',  radius: [42, 60], hits: 4, speed: [75, 95],   children: 3, damage: 14 }
+    { name: 'petit', radius: [7, 11],  hits: 1, speed: [120, 150], children: 0, damage: 4 },
+    { name: 'moyen', radius: [18, 26], hits: 2, speed: [95, 120],  children: 3, damage: 10 },
+    { name: 'gros',  radius: [42, 60], hits: 4, speed: [75, 95],   children: 3, damage: 22 }
 ];
 
 function rand(a, b) { return a + Math.random() * (b - a); }

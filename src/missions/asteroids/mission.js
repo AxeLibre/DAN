@@ -9,16 +9,20 @@ import { AsteroidField, TIERS } from './field.js';
 // les moyens en petits. Chaque impact abîme la coque : à 0 %, l'Executor explose.
 const MISSION = {
     DURATION: 90,                       // secondes à tenir
+    LAST_SPAWN: 7,                      // plus de nouvel astéroïde dans les dernières secondes
     SPAWN_EVERY: [5.5, 2.4],            // secondes entre deux astéroïdes (début → fin de mission)
     TIER_MIX: [0.15, 0.4, 0.45],        // proportion de petits / moyens / gros
     SPAWN_BOX: { x: 900, y: [120, 600], z: [2400, 3000] },   // d'où ils arrivent (devant le pont)
     AIM_BOX: { x: 600, y: [-80, 120], z: [-150, 1200] },     // où ils visent sur la coque
-    BACKGROUND: 260,                    // rochers du décor
+    BACKGROUND: 320,                    // rochers du décor
     DRIFT: -18,                         // le champ défile lentement (on avance dedans)
     START: [new THREE.Vector3(0, 200, -150), new THREE.Vector3(0, 260, 300), new THREE.Vector3(0, 230, 700)]
 };
 
-// le couloir de jeu reste libre de rochers du décor
+// Les rochers du décor défilent le long de l'Executor (de l'avant vers l'arrière) :
+// ils restent hors du volume de la coque (≈ ±3400 en x, de -1750 à -80 en y, sur toute
+// sa longueur), et hors du couloir de jeu au-dessus du pont.
+const HULL = { x: 3600, yMin: -1950, yMax: 150 };
 const CORRIDOR = { x: 1400, yMax: 1100, zMin: -700, zMax: 4300 };
 
 function rand(a, b) { return a + Math.random() * (b - a); }
@@ -39,14 +43,17 @@ export function initAsteroidMission(ctx, { hud, cine, returnToHangar }) {
     // -------------------------------------------------------------------------------------
     // Décor : rochers autour du couloir de jeu
     // -------------------------------------------------------------------------------------
-    function placeBackground(p, zMin = -5000, zMax = 12000) {
-        do {
-            p.set(rand(-5500, 5500), rand(-700, 2200), rand(zMin, zMax));
-        } while (Math.abs(p.x) < CORRIDOR.x && p.y < CORRIDOR.yMax && p.z > CORRIDOR.zMin && p.z < CORRIDOR.zMax);
-        return p;
+    function placeBackground(p, radius, zMin = -5000, zMax = 12000) {
+        for (;;) {
+            p.set(rand(-7000, 7000), rand(-2600, 2600), rand(zMin, zMax));
+            const inHull = Math.abs(p.x) < HULL.x + radius && p.y - radius < HULL.yMax && p.y + radius > HULL.yMin;
+            const inCorridor = Math.abs(p.x) < CORRIDOR.x + radius && p.y - radius < CORRIDOR.yMax &&
+                               p.z > CORRIDOR.zMin && p.z < CORRIDOR.zMax;
+            if (!inHull && !inCorridor) return p;
+        }
     }
     function wrapBackground(r) {
-        if (r.position.z < -5500) placeBackground(r.position, 10000, 12000);
+        if (r.position.z < -5500) placeBackground(r.position, r.radius, 10000, 12000);
     }
 
     // -------------------------------------------------------------------------------------
@@ -132,8 +139,9 @@ export function initAsteroidMission(ctx, { hud, cine, returnToHangar }) {
         const p = new THREE.Vector3();
         for (let i = 0; i < MISSION.BACKGROUND; i++) {
             const big = Math.random() < 0.12;
-            field.add({ kind: 'bg', radius: big ? rand(90, 240) : rand(12, 70), position: placeBackground(p),
-                        velocity: new THREE.Vector3(rand(-3, 3), rand(-2, 2), rand(-3, 3)) });
+            const radius = big ? rand(90, 240) : rand(12, 70);
+            field.add({ kind: 'bg', radius, position: placeBackground(p, radius),
+                        velocity: new THREE.Vector3(rand(-3, 3), rand(-2, 2), 0) });   // pas de dérive en z vers la coque
         }
         field.setVisible(true);
 
@@ -247,7 +255,7 @@ export function initAsteroidMission(ctx, { hud, cine, returnToHangar }) {
         hud.setTime(timeLeft);
 
         // de plus en plus d'astéroïdes au fil de la mission
-        if (timeLeft > 0) {
+        if (timeLeft > MISSION.LAST_SPAWN) {
             spawnTimer -= dt;
             if (spawnTimer <= 0) {
                 const k = 1 - timeLeft / MISSION.DURATION;
@@ -257,11 +265,12 @@ export function initAsteroidMission(ctx, { hud, cine, returnToHangar }) {
         }
 
         for (const r of field.threats()) {
-            if (r.target && r.travelled >= r.pathLength) impact(r);
+            if (r.target && r.travelled >= r.pathLength - r.radius * 0.7) impact(r);   // contact du bord du rocher
             else if (!r.target && r.travelled >= r.pathLength) field.remove(r);   // passé à côté
         }
 
-        if (timeLeft <= 0 && field.threats().length === 0 && hull > 0) win();
+        // fin du compte à rebours : l'Executor est sorti du champ (les derniers rochers sont distancés)
+        if (timeLeft <= 0 && hull > 0) win();
     }
 
     // -------------------------------------------------------------------------------------
