@@ -20,7 +20,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { NodeIO, PropertyType } from '@gltf-transform/core';
 import { ALL_EXTENSIONS } from '@gltf-transform/extensions';
-import { prune, dedup, textureCompress, meshopt, weld, simplify, flatten, join, palette } from '@gltf-transform/functions';
+import { prune, dedup, textureCompress, meshopt, weld, simplify, flatten, join, palette, compactPrimitive } from '@gltf-transform/functions';
 import { MeshoptEncoder, MeshoptDecoder, MeshoptSimplifier } from 'meshoptimizer';
 
 // Modèles simplifiés (part de triangles gardée) : les vaisseaux de la bataille,
@@ -39,6 +39,18 @@ const SIMPLIFY = {
     'croiser_tank.glb': 0.35,    // mission hypercarburant : 147 000 triangles
     'base_hypercarburant.glb': 0.6
 };
+
+// Modèles faits de milliers de petits blocs séparés (greebles) : la simplification normale
+// ne peut pas les réduire. Ici on retire aussi les blocs trop petits pour être vus
+// (option "Prune" de meshoptimizer). ratio : part gardée ; error : taille des détails retirés
+// (en part de la taille du morceau).
+const SIMPLIFY_PRUNE = {
+    'star_executor_web.glb': { ratio: 0.35, error: 0.002, minTriangles: 20000 }   // export complet : 745 000 triangles
+};
+
+// Matériaux dont la texture est projetée par le shader (triplanaire, voir src/executor.js) :
+// leurs UV ne servent à rien, et leurs coutures empêchent la simplification → retirées
+const NO_UV = { 'star_executor_web.glb': /ScratchedMetal/ };
 
 // Modèles fusionnés en gardant certains objets à part (retrouvés par leur nom dans le code)
 const KEEP_NAMED = {
@@ -92,6 +104,28 @@ for (const file of files) {
         // palette : les matériaux de couleur unie sont regroupés en un seul
         // (couleurs rangées dans une petite texture) → encore moins de morceaux
         await doc.transform(palette({ min: 2 }), flatten(), join({ keepNamed: false }));
+    }
+    if (NO_UV[file]) {
+        for (const mesh of doc.getRoot().listMeshes()) for (const prim of mesh.listPrimitives()) {
+            const mat = prim.getMaterial();
+            if (mat && NO_UV[file].test(mat.getName())) prim.setAttribute('TEXCOORD_0', null);
+        }
+    }
+    if (SIMPLIFY_PRUNE[file]) {
+        const { ratio, error, minTriangles } = SIMPLIFY_PRUNE[file];
+        await doc.transform(weld());
+        for (const mesh of doc.getRoot().listMeshes()) for (const prim of mesh.listPrimitives()) {
+            const idx = prim.getIndices();
+            if (!idx || idx.getCount() / 3 < minTriangles) continue;
+            const indices = new Uint32Array(idx.getArray());
+            const pos = prim.getAttribute('POSITION');
+            const positions = new Float32Array(pos.getCount() * 3);
+            for (let i = 0, v = [0, 0, 0]; i < pos.getCount(); i++) { pos.getElement(i, v); positions.set(v, i * 3); }
+            const target = Math.floor(indices.length * ratio / 3) * 3;
+            const [out] = MeshoptSimplifier.simplify(indices, positions, 3, target, error, ['Prune']);
+            idx.setArray(out);
+            compactPrimitive(prim);
+        }
     }
     if (SIMPLIFY[file]) {
         await doc.transform(
