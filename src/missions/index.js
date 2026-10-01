@@ -1,5 +1,6 @@
 import { createCinematics } from './cinematics.js';
 import { initAsteroidMission } from './asteroids/mission.js';
+import { initFuelMission } from './fuel/mission.js';
 import { initMissionHud } from '../ui/missionHud.js';
 import { initMissionSelect } from '../ui/missionSelect.js';
 
@@ -9,6 +10,7 @@ import { initMissionSelect } from '../ui/missionSelect.js';
 // En montant dans le TIE (sortie du hangar), on choisit une mission :
 //   - 'battle'    : la bataille contre la flotte rebelle
 //   - 'asteroids' : protéger l'Executor dans un champ d'astéroïdes
+//   - 'fuel'      : escorter le croiseur-citerne, puis abattre le Slave I de Boba Fett
 // Tant qu'aucune mission n'est choisie, le TIE reste en vol stationnaire devant le hangar.
 // Le bouton "Retour au hangar" (ou H) ramène proprement au hangar et arrête la mission.
 export function initMissions(ctx) {
@@ -19,7 +21,19 @@ export function initMissions(ctx) {
     let wasInside = true;
 
     const asteroids = initAsteroidMission(ctx, { hud, cine, returnToHangar });
-    ctx.asteroids = asteroids;
+    const fuel = initFuelMission(ctx, { hud, cine, returnToHangar });
+    const byId = { asteroids, fuel };
+    const current = () => byId[state.mission] || null;
+
+    // cibles de la mission en cours : tirs du joueur, aide à la visée, radar, collisions
+    ctx.missionTargets = {
+        active: () => !!(current() && current().active()),
+        hitTest: (p0, p1) => current() ? current().hitTest(p0, p1) : null,
+        hit: (target, point) => { if (current()) current().hit(target, point); },
+        lockCandidates: () => current() ? current().lockCandidates() : [],
+        radarPositions: () => current() ? current().radarPositions() : [],
+        collide: (pos, move, margin) => current() ? current().collide(pos, move, margin) : null
+    };
     const select = initMissionSelect({ onPick: pick, onHangar: returnToHangar });
 
     function pick(id) {
@@ -28,13 +42,14 @@ export function initMissions(ctx) {
         if (id === 'battle') {
             state.mission = 'battle';            // la bataille démarre (voir battleOn)
             ctx.battle.announce('La flotte rebelle attaque !');
-        } else if (id === 'asteroids') {
-            asteroids.start();
+        } else if (byId[id]) {
+            byId[id].start();
         }
     }
 
     function stopMission() {
         asteroids.stop();
+        fuel.stop();
         state.mission = null;
         select.setOpen(false);
     }
@@ -69,6 +84,7 @@ export function initMissions(ctx) {
         wasInside = inside;
         select.setHangarButton(!inside && !state.cinematic && !returning);
         asteroids.update(dt);
+        fuel.update(dt);
     }
 
     return { update, returnToHangar };

@@ -83,10 +83,10 @@ export function initPlayerWeapons(ctx) {
         let best = null;
         let bestAngle = THREE.MathUtils.degToRad(maxAngleDeg);
         const v = new THREE.Vector3();
-        // mission "champ d'astéroïdes" : on vise les astéroïdes menaçants
-        const asteroids = ctx.asteroids && ctx.asteroids.active();
-        for (const e of asteroids ? ctx.asteroids.lockCandidates() : enemies) {
-            if (!e || !e.visible || e.dead || e.userData.dead || (!asteroids && !battle.xwingActive(e))) continue;
+        // pendant une mission (astéroïdes, Slave I…) : on vise ses cibles
+        const mission = ctx.missionTargets && ctx.missionTargets.active();
+        for (const e of mission ? ctx.missionTargets.lockCandidates() : enemies) {
+            if (!e || !e.visible || e.dead || e.userData.dead || (!mission && !battle.xwingActive(e))) continue;
             v.subVectors(e.position, origin);
             const d = v.length();
             if (d > maxDist || d < 1) continue;

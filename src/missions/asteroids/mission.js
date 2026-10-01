@@ -319,7 +319,10 @@ export function initAsteroidMission(ctx, { hud, cine, returnToHangar }) {
     return {
         start, stop, update,
         active: () => running,
-        hitTest: (p0, p1) => running ? field.hitTest(p0, p1) : null,
+        hitTest(p0, p1) {
+            const h = running ? field.hitTest(p0, p1) : null;
+            return h ? { target: h.rock, t: h.t, point: h.point } : null;
+        },
         hit(rock, point) {
             if (rock.dead) return;
             if (rock.kind === 'bg') {

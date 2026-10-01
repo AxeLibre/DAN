@@ -112,10 +112,11 @@ export function initAudio(scene, camera) {
     // -------------------------------------------------------------------------------------
     // Chaque son est joué à l'endroit où il se produit : plus fort quand c'est proche,
     // à gauche / à droite selon sa position. Petits groupes de "voix" réutilisées.
-    function makePositionalPool(urls, count, volume, refDistance) {
+    // trim : retire le silence au début du fichier (le son part tout de suite)
+    function makePositionalPool(urls, count, volume, refDistance, trim = false) {
         const list = Array.isArray(urls) ? urls : [urls];
         const pool = { voices: [], buffers: [], volume, next: 0, last: 0 };
-        list.forEach((url, i) => audioLoader.load(url, b => { pool.buffers[i] = b; }));
+        list.forEach((url, i) => audioLoader.load(url, b => { pool.buffers[i] = trim ? trimSilence(b) : b; }));
         for (let i = 0; i < count; i++) {
             const holder = new THREE.Object3D();
             const voice = new THREE.PositionalAudio(listener);
@@ -127,6 +128,16 @@ export function initAudio(scene, camera) {
             pool.voices.push({ holder, voice });
         }
         return pool;
+    }
+
+    function trimSilence(buffer, threshold = 0.02) {
+        const data = buffer.getChannelData(0);
+        let start = 0;
+        while (start < data.length && Math.abs(data[start]) < threshold) start++;
+        if (start < buffer.sampleRate * 0.05 || start >= data.length) return buffer;
+        const out = listener.context.createBuffer(buffer.numberOfChannels, buffer.length - start, buffer.sampleRate);
+        for (let c = 0; c < buffer.numberOfChannels; c++) out.copyToChannel(buffer.getChannelData(c).subarray(start), c);
+        return out;
     }
 
     /** Joue un son du groupe à une position (minGap : délai mini entre deux sons du groupe). */
@@ -150,6 +161,8 @@ export function initAudio(scene, camera) {
         explosion: makePositionalPool('public/explosion.mp3', 8, 1.6, 160),
         boom:      makePositionalPool('public/boom.mp3', 4, 2.2, 400),
         laser:     makePositionalPool('public/laser.mp3', 8, 0.5, 120),       // tirs rouges (canon, X-Wing)
+        // charges sismiques du Slave I (deux versions du son, "cordes de guitare frappées")
+        seismic:   makePositionalPool(['public/SEISMIC_CHARGE_EXPLOSION.ogg', 'public/star-wars-seismic-charge.mp3'], 3, 2.6, 700, true),
         tieLaser:  makePositionalPool('public/tielaser.mp3', 8, 0.6, 120),    // tirs verts des TIE
         r2:        makePositionalPool(['public/R2.WAV', 'public/R2 1.WAV', 'public/R2 2.WAV', 'public/R2 3.WAV',
                                        'public/R2 4.WAV', 'public/R2 5.WAV', 'public/R2 7.WAV', 'public/R2 8.WAV',

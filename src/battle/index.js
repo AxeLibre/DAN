@@ -67,9 +67,9 @@ export function initBattle(ctx) {
     }
 
     function playerBoltHitTest(bolt, p0, p1) {
-        // mission "champ d'astéroïdes"
-        const a = ctx.asteroids && ctx.asteroids.hitTest(p0, p1);
-        if (a) return { kind: 'asteroid', ...a };
+        // cibles de la mission en cours (astéroïdes, Slave I…)
+        const m = ctx.missionTargets && ctx.missionTargets.hitTest(p0, p1);
+        if (m) return { kind: 'mission', ...m };
         const x = hitShipList(enemies, p0, p1, 18);
         const c = battle.fleet.hitTest(p0, p1, bolt);
         if (x && (!c || x.t <= c.t)) return { kind: 'xwing', ...x };
@@ -83,8 +83,8 @@ export function initBattle(ctx) {
             battle.destroyEnemy(hit.target, true);
         } else if (hit.kind === 'capital') {
             battle.fleet.hit(hit.ship, hit.part, hit.point, bolt.dir);
-        } else if (hit.kind === 'asteroid') {
-            ctx.asteroids.hit(hit.rock, hit.point);
+        } else if (hit.kind === 'mission') {
+            ctx.missionTargets.hit(hit.target, hit.point);
         }
     }
 

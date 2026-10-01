@@ -35,7 +35,9 @@ const SIMPLIFY = {
     'frigate.glb': 0.5,
     'CR90_lite.glb': 0.6,
     'transport.glb': 0.5,
-    'star_destroyer2.glb': 0.5   // les deux destroyers en orbite
+    'star_destroyer2.glb': 0.5,  // les deux destroyers en orbite
+    'croiser_tank.glb': 0.35,    // mission hypercarburant : 147 000 triangles
+    'base_hypercarburant.glb': 0.6
 };
 
 // Modèles fusionnés en gardant certains objets à part (retrouvés par leur nom dans le code)
@@ -52,7 +54,8 @@ const MERGE = new Set([
     //  Inutile de toute façon : les TIE sont instanciés, tous dessinés ensemble.)
     'xwing.glb', 'y-wing.glb', 'liberty.glb', 'frigate.glb',
     'CR90_lite.glb', 'transport.glb', 'star_destroyer2.glb',
-    'capital_part1.glb', 'capital_part2.glb', 'capital_part3.glb'
+    'capital_part1.glb', 'capital_part2.glb', 'capital_part3.glb',
+    'croiser_tank.glb', 'base_hypercarburant.glb'
 ]);
 import sharp from 'sharp';
 

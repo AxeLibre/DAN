@@ -21,6 +21,7 @@ const CSS = `
 #mission-select .desc { font-size: 11px; line-height: 1.45; letter-spacing: .04em; opacity: .8; }
 #mission-select .card.battle .name { color: #ffb4a8; }
 #mission-select .card.asteroids .name { color: #ffd98a; }
+#mission-select .card.fuel .name { color: #8fe6ff; }
 @media (max-width: 560px) { #mission-select .cards { flex-direction: column; } #mission-select .card { width: 78vw; } }
 
 #hangar-button { position: fixed; left: 18px; bottom: 18px; z-index: 99991; padding: 10px 16px; cursor: pointer;
@@ -37,7 +38,9 @@ const MISSIONS = [
     { id: 'battle', key: '1', icon: '⚔', name: 'BATAILLE',
       desc: 'La flotte rebelle attaque ! Abats les X-Wing et Y-Wing, détruis les croiseurs.' },
     { id: 'asteroids', key: '2', icon: '☄', name: "CHAMP D'ASTÉROÏDES",
-      desc: "L'Executor traverse un champ d'astéroïdes. Détruis-les avant qu'ils ne percutent la coque." }
+      desc: "L'Executor traverse un champ d'astéroïdes. Détruis-les avant qu'ils ne percutent la coque." },
+    { id: 'fuel', key: '3', icon: '⛽', name: 'HYPERCARBURANT',
+      desc: "Escorte le croiseur-citerne jusqu'à la station. Attention : Boba Fett rôde avec le Slave I…" }
 ];
 
 /** onPick(id) : mission choisie ; onHangar() : bouton / touche H */

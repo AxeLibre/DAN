@@ -32,7 +32,8 @@ export function createContext() {
             currentFlightSpeed: 1,  // vitesse du TIE en vol (accélération progressive)
             cannonActive: false,    // canon laser de la passerelle sorti
             cameraShake: 0,         // secousse de la caméra (tir, impact, collision)
-            mission: null,          // mission en TIE : null (au choix) | 'battle' | 'asteroids'
+            mission: null,          // mission en TIE : null (au choix) | 'battle' | 'asteroids' | 'fuel'
+            cruiseSpeed: null,      // vitesse de croisière imposée par la mission (null : normale)
             cinematic: false        // cinématique en cours : commandes du joueur coupées
         }
     };

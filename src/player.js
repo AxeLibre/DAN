@@ -301,7 +301,7 @@ export function initPlayer(ctx) {
             }
         }
         if (!hit) hit = ctx.battle.fleet.collide(origin, moveVector, 8, lastFrameDt);
-        if (!hit && ctx.asteroids) hit = ctx.asteroids.collide(origin, moveVector, 8);   // champ d'astéroïdes
+        if (!hit && ctx.missionTargets) hit = ctx.missionTargets.collide(origin, moveVector, 8);   // astéroïdes, vaisseaux de la mission
         if (!hit) return false;
 
         const now = performance.now() * 0.001;
@@ -473,7 +473,7 @@ export function initPlayer(ctx) {
             state.currentFlightSpeed = FLIGHT_CRUISE_SPEED;   // le pilote automatique gère la trajectoire
         } else if (playerState === "flight") {
             // tant qu'aucune mission n'est choisie : vol stationnaire devant le hangar
-            const cruise = state.mission ? FLIGHT_CRUISE_SPEED : 0;
+            const cruise = state.mission ? (state.cruiseSpeed || FLIGHT_CRUISE_SPEED) : 0;   // (une mission peut la changer)
             const targetSpeed = state.mission && updateBoost(dt) ? FLIGHT_BOOST_SPEED : cruise;
             state.currentFlightSpeed += (targetSpeed - state.currentFlightSpeed) * (1 - Math.exp(-2.5 * dt));
             // direction de la caméra
