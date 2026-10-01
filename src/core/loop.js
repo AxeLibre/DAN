@@ -50,6 +50,7 @@ export function startLoop(ctx, bloom) {
         ctx.mapScreen.update(dt);
 
         ctx.battle.update(dt);
+        ctx.missions.update(dt);
         ctx.playerControls.updateCameraShake(dt);
 
         ctx.consoleButtons.update(dt);

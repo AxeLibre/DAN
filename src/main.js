@@ -24,6 +24,7 @@ import { initHangarConsole } from './hangar/console.js';
 import { initLanding } from './hangar/landing.js';
 import { initBattle } from './battle/index.js';
 import { initPlayer } from './player.js';
+import { initMissions } from './missions/index.js';
 
 // =========================================================================================
 // LE DESTROYER DE DAN — point d'entrée
@@ -73,6 +74,9 @@ ctx.battle = initBattle(ctx);
 // Joueur : clavier, souris, collisions, entrée / sortie du vaisseau (voir src/player.js)
 ctx.playerControls = initPlayer(ctx);
 
+// Missions en TIE : choix en montant dans le cockpit, retour au hangar (voir src/missions/)
+ctx.missions = initMissions(ctx);
+
 // Clics sur les boutons de la passerelle et la console du hangar
 initClicks(ctx);
 
@@ -84,3 +88,4 @@ handleResize(camera, renderer, (w, h) => bloom.setSize(w, h));
 initVolumeControl(ctx.audio, [ctx.hyperspace.video, ...ctx.screens.videos, ctx.mapScreen.video]);
 
 startLoop(ctx, bloom);
+

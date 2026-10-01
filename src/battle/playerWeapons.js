@@ -83,8 +83,10 @@ export function initPlayerWeapons(ctx) {
         let best = null;
         let bestAngle = THREE.MathUtils.degToRad(maxAngleDeg);
         const v = new THREE.Vector3();
-        for (const e of enemies) {
-            if (!e || !e.visible || e.userData.dead || !battle.xwingActive(e)) continue;
+        // mission "champ d'astéroïdes" : on vise les astéroïdes menaçants
+        const asteroids = ctx.asteroids && ctx.asteroids.active();
+        for (const e of asteroids ? ctx.asteroids.lockCandidates() : enemies) {
+            if (!e || !e.visible || e.dead || e.userData.dead || (!asteroids && !battle.xwingActive(e))) continue;
             v.subVectors(e.position, origin);
             const d = v.length();
             if (d > maxDist || d < 1) continue;
@@ -201,7 +203,7 @@ export function initPlayerWeapons(ctx) {
     function updateTieGuns(dt) {
         tieGunCooldown -= dt;
         tieLock = null;
-        if (state.isInsideShip) return;
+        if (state.isInsideShip || state.cinematic) return;
 
         const camPos = camera.getWorldPosition(new THREE.Vector3());
         const fwd = camera.getWorldDirection(new THREE.Vector3());

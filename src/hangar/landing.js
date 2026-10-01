@@ -99,6 +99,9 @@ export function initLanding(ctx) {
         autopilotActive: () => autopilot.active,
         updateAutopilot,
         update: updateLanding,
-        leaveHangar
+        leaveHangar,
+        // vol automatique depuis la position actuelle, en passant par des points (missions)
+        flyTo: (points, yawTo, duration) => startAutopilot([ctx.player.position.clone(), ...points], yawTo, duration),
+        cancel: () => { autopilot.active = false; }
     };
 }

@@ -301,6 +301,7 @@ export function initPlayer(ctx) {
             }
         }
         if (!hit) hit = ctx.battle.fleet.collide(origin, moveVector, 8, lastFrameDt);
+        if (!hit && ctx.asteroids) hit = ctx.asteroids.collide(origin, moveVector, 8);   // champ d'astéroïdes
         if (!hit) return false;
 
         const now = performance.now() * 0.001;
@@ -407,6 +408,7 @@ export function initPlayer(ctx) {
 
 
     function updateinout() {
+        if (state.cinematic) return;
 
         if (!ctx.ships.isReady() || !detectionMesh) return;
 
@@ -454,7 +456,7 @@ export function initPlayer(ctx) {
 
     // jauge + son du réacteur (appelé à chaque image, après la vitesse)
     function updateFlightFeedback(dt) {
-        const inFlight = !state.isInsideShip;
+        const inFlight = !state.isInsideShip && !state.cinematic;
         if (!inFlight) boosting = false;
         if (inFlight && playerState !== "flight") boostEnergy = Math.min(1, boostEnergy + dt / BOOST_RECHARGE);
         boostGauge.update(inFlight, boostEnergy, boosting, boostEmpty, state.currentFlightSpeed);
@@ -465,11 +467,14 @@ export function initPlayer(ctx) {
     // avance du TIE en vol (chaque image)
     function updateFlight(dt) {
         lastFrameDt = dt;
+        if (state.cinematic) { updateFlightFeedback(dt); return; }
 
         if (ctx.landing.autopilotActive()) {
             state.currentFlightSpeed = FLIGHT_CRUISE_SPEED;   // le pilote automatique gère la trajectoire
         } else if (playerState === "flight") {
-            const targetSpeed = updateBoost(dt) ? FLIGHT_BOOST_SPEED : FLIGHT_CRUISE_SPEED;
+            // tant qu'aucune mission n'est choisie : vol stationnaire devant le hangar
+            const cruise = state.mission ? FLIGHT_CRUISE_SPEED : 0;
+            const targetSpeed = state.mission && updateBoost(dt) ? FLIGHT_BOOST_SPEED : cruise;
             state.currentFlightSpeed += (targetSpeed - state.currentFlightSpeed) * (1 - Math.exp(-2.5 * dt));
             // direction de la caméra
             const direction = new THREE.Vector3();
@@ -486,6 +491,7 @@ export function initPlayer(ctx) {
 
     // pilote automatique, ou commandes du joueur
     function updateControls(dt) {
+        if (state.cinematic) return;           // la cinématique tient la caméra
         if (ctx.landing.autopilotActive()) ctx.landing.updateAutopilot(dt);
         else updateCamera(dt);
     }

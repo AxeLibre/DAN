@@ -31,7 +31,9 @@ export function createContext() {
             flightRoll: 0,          // inclinaison dans les virages
             currentFlightSpeed: 1,  // vitesse du TIE en vol (accélération progressive)
             cannonActive: false,    // canon laser de la passerelle sorti
-            cameraShake: 0          // secousse de la caméra (tir, impact, collision)
+            cameraShake: 0,         // secousse de la caméra (tir, impact, collision)
+            mission: null,          // mission en TIE : null (au choix) | 'battle' | 'asteroids'
+            cinematic: false        // cinématique en cours : commandes du joueur coupées
         }
     };
 }

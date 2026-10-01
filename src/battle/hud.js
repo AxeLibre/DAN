@@ -79,7 +79,8 @@ export function initBattleHud(ctx) {
         radarTimer -= dt;
         if (radarTimer <= 0) {
             radarTimer = 0.1;
-            const xs = enemies.filter(e => e.visible).map(e => e.position);
+            const xs = enemies.filter(e => e.visible).map(e => e.position)
+                .concat(ctx.asteroids ? ctx.asteroids.radarPositions() : []);   // astéroïdes menaçants
             const caps = battle.fleet.positions();
             hud.drawRadar(ctx.player.position, ctx.player.rotation.y, xs, caps, hud.mode === 'flight' ? 1400 : 2200);
         }

@@ -29,9 +29,9 @@ export function initBattle(ctx) {
     // Toutes les explosions GLSL font du bruit, là où elles ont lieu (voir src/audio.js)
     ctx.audio.attachExplosionSounds(fx);
 
-    // La bataille (X-Wing + TIE alliés) est visible avec le canon OU en vol
+    // La bataille (X-Wing + TIE alliés) est visible avec le canon OU en vol, pendant la mission "bataille"
     function battleOn() {
-        return state.cannonActive || !state.isInsideShip;
+        return state.cannonActive || (!state.isInsideShip && state.mission === 'battle');
     }
 
     // Un "dessinateur" par type de chasseur : tous les vaisseaux du même modèle sont
@@ -67,6 +67,9 @@ export function initBattle(ctx) {
     }
 
     function playerBoltHitTest(bolt, p0, p1) {
+        // mission "champ d'astéroïdes"
+        const a = ctx.asteroids && ctx.asteroids.hitTest(p0, p1);
+        if (a) return { kind: 'asteroid', ...a };
         const x = hitShipList(enemies, p0, p1, 18);
         const c = battle.fleet.hitTest(p0, p1, bolt);
         if (x && (!c || x.t <= c.t)) return { kind: 'xwing', ...x };
@@ -80,6 +83,8 @@ export function initBattle(ctx) {
             battle.destroyEnemy(hit.target, true);
         } else if (hit.kind === 'capital') {
             battle.fleet.hit(hit.ship, hit.part, hit.point, bolt.dir);
+        } else if (hit.kind === 'asteroid') {
+            ctx.asteroids.hit(hit.rock, hit.point);
         }
     }
 

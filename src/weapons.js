@@ -511,7 +511,14 @@ export class CombatHUD {
     setScore(n, capitals = 0) {
         this.kills = n;
         this.capitals = capitals;
-        this.score.innerHTML = `<div>chasseurs : ${n}</div><div>croiseurs : ${capitals}</div>`;
+        if (!this.scoreLines) this.score.innerHTML = `<div>chasseurs : ${n}</div><div>croiseurs : ${capitals}</div>`;
+    }
+
+    /** Score d'une mission (lignes de texte) ; null = retour au score de la bataille */
+    setScoreLines(lines) {
+        this.scoreLines = lines;
+        if (lines) this.score.innerHTML = lines.map(l => `<div>${l}</div>`).join('');
+        else this.setScore(this.kills, this.capitals);
     }
 
     showLock(x, y, visible) {
