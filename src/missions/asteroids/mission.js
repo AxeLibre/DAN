@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { AsteroidField, TIERS } from './field.js';
+import { createExecutorWreck } from '../executorWreck.js';
 
 // =========================================================================================
 // MISSION "CHAMP D'ASTÉROÏDES" : protéger l'Executor
@@ -36,6 +37,7 @@ export function initAsteroidMission(ctx, { hud, cine, returnToHangar }) {
     const field = new AsteroidField(scene);
     field.setVisible(false);
     const ray = new THREE.Raycaster();
+    const wreck = createExecutorWreck(ctx);
 
     let running = false, cinematic = null, run = 0;   // run : numéro de partie (ignore les minuteurs d'avant)
     let timeLeft = 0, spawnTimer = 0, hull = 100, destroyed = 0;
@@ -157,6 +159,7 @@ export function initAsteroidMission(ctx, { hud, cine, returnToHangar }) {
 
     function stop() {
         run++;
+        wreck.restore();
         running = false;
         cinematic = null;
         field.clear();
@@ -169,15 +172,21 @@ export function initAsteroidMission(ctx, { hud, cine, returnToHangar }) {
     // -------------------------------------------------------------------------------------
     // Cinématiques
     // -------------------------------------------------------------------------------------
-    function beginCinematic(kind, from, to, duration) {
+    function beginCinematic() {
         running = false;
         state.cinematic = true;
         state.fireHeldMouse = state.fireHeldSpace = false;
         ctx.landing.cancel();
         ctx.hud.show(null);
+        ctx.ships.showCockpit(false);          // plan "caméra", sans le cockpit
         hud.hide();
         cine.bars(true);
-        cinematic = { kind, from, to, look: null, t: 0, duration };
+        cinematic = { shot: null, accelerate: false };
+    }
+
+    // plan de caméra : de "from" vers "to", en regardant de "lookFrom" vers "lookTo"
+    function shot(from, to, lookFrom, lookTo, duration) {
+        cinematic.shot = { from, to, lookFrom, lookTo: lookTo || lookFrom, t: 0, duration };
     }
 
     // points au hasard sur la coque, autour de la tour (explosions en chaîne)
@@ -193,39 +202,66 @@ export function initAsteroidMission(ctx, { hud, cine, returnToHangar }) {
         return pts;
     }
 
+    // ÉCHEC : la coque prend feu autour de la tour, la tour saute, on recule pour voir
+    // l'Executor se briser en morceaux (comme les croiseurs rebelles)
     async function fail() {
         if (cinematic) return;
         const me = run;
-        beginCinematic('fail', new THREE.Vector3(1500, 520, 2300), new THREE.Vector3(1150, 380, 1700), 9);
-        cinematic.look = new THREE.Vector3(0, -20, 500);
-        const { fx } = ctx.battle;
-        const pts = hullPoints(90);
-        // explosions en chaîne, de plus en plus nombreuses et grosses
+        const alive = () => me === run;
+        const { fx, debris } = ctx.battle;
+        beginCinematic();
+
+        // 1) gros plan sur la tour : explosions en chaîne sur la coque
+        const near = new THREE.Vector3(1150, 380, 1700);
+        shot(new THREE.Vector3(1500, 520, 2300), near, new THREE.Vector3(0, -20, 300), new THREE.Vector3(0, 30, 0), 4.2);
+        const pts = hullPoints(70);
         pts.forEach((p, i) => {
             const k = i / pts.length;
-            setTimeout(() => { if (me === run) fx.explosion(p, rand(25, 60) * (0.6 + k * 1.4)); }, 5000 * Math.pow(k, 0.7));
+            setTimeout(() => { if (alive()) fx.explosion(p, rand(25, 60) * (0.6 + k * 1.4)); }, 4000 * Math.pow(k, 0.7));
         });
-        await cine.wait(5.0);
-        if (me !== run) return;
-        cine.flash(1, 1.8);                                    // l'Executor explose
-        fx.explosion(new THREE.Vector3(0, 40, 0), 420);
-        fx.explosion(new THREE.Vector3(-300, -40, 900), 300);
-        fx.explosion(new THREE.Vector3(350, -40, 1800), 300);
-        state.cameraShake = 2.5;
-        await cine.wait(0.9);
-        if (me !== run) return;
+        await cine.wait(4.0);
+        if (!alive()) return;
+
+        // 2) la tour saute
+        const tower = new THREE.Vector3(0, 40, 0);
+        cine.flash(0.7, 1.2);
+        fx.explosion(tower, 300);
+        for (let i = 0; i < 6; i++) fx.explosion(tower.clone().add(new THREE.Vector3(rand(-150, 150), rand(-80, 80), rand(-150, 150))), rand(120, 200));
+        debris.spawn(tower, 90, { speed: [60, 240], size: [4, 28], life: [8, 14], hot: 0.8 });
+        ctx.executor.setTowerDestroyed(true);
+        state.cameraShake = 1.6;
+
+        // 3) on recule : vue d'ensemble, la coque se brise
+        const far = new THREE.Vector3(-10000, 5200, -2000);
+        shot(near, far, new THREE.Vector3(0, 30, 0), new THREE.Vector3(0, -800, 7500), 7.5);
+        await cine.wait(1.6);
+        if (!alive()) return;
+        wreck.breakApart();
+        cine.flash(0.5, 1.6);
+        // incendies et explosions sur les morceaux qui dérivent
+        for (let i = 0; i < 40; i++) {
+            setTimeout(() => {
+                if (!alive()) return;
+                const p = wreck.surfacePoint();
+                fx.explosion(p, rand(180, 520));
+                if (i % 3 === 0) debris.spawn(p, 5, { speed: [60, 240], size: [25, 90], life: [8, 14], hot: 0.9 });
+            }, 300 + i * rand(120, 200));
+        }
+        await cine.wait(4.6);
+        if (!alive()) return;
         cine.title("L'Executor est détruit", 'MISSION ÉCHOUÉE', 'lose');
-        await cine.wait(3.4);
-        if (me === run) returnToHangar();
+        await cine.wait(4.4);
+        if (alive()) returnToHangar();
     }
 
+    // RÉUSSITE : vue vers l'arrière, le champ d'astéroïdes s'éloigne derrière l'Executor
     async function win() {
         if (cinematic) return;
         const me = run;
-        // vue vers l'arrière : le champ d'astéroïdes s'éloigne derrière l'Executor
-        beginCinematic('win', new THREE.Vector3(220, 330, 520), new THREE.Vector3(260, 420, 380), 7);
-        cinematic.look = new THREE.Vector3(0, -60, -4000);
+        beginCinematic();
         cinematic.accelerate = true;
+        shot(new THREE.Vector3(220, 330, 520), new THREE.Vector3(260, 420, 380),
+             new THREE.Vector3(0, -60, -4000), null, 7);
         await cine.wait(1.2);
         if (me !== run) return;
         cine.title('Mission réussie', `L'EXECUTOR A TRAVERSÉ LE CHAMP — ${destroyed} ASTÉROÏDES DÉTRUITS`, 'win');
@@ -233,12 +269,16 @@ export function initAsteroidMission(ctx, { hud, cine, returnToHangar }) {
         if (me === run) returnToHangar();
     }
 
+    const _from = new THREE.Vector3(), _look = new THREE.Vector3();
     function updateCinematic(dt) {
-        const c = cinematic;
-        c.t = Math.min(c.duration, c.t + dt);
-        const e = c.t / c.duration, s = e * e * (3 - 2 * e);
-        cine.lookAt(new THREE.Vector3().lerpVectors(c.from, c.to, s), c.look);
-        if (c.accelerate) {
+        const c = cinematic.shot;
+        if (c) {
+            c.t = Math.min(c.duration, c.t + dt);
+            const e = c.t / c.duration, s = e * e * (3 - 2 * e);
+            cine.lookAt(_from.lerpVectors(c.from, c.to, s), _look.lerpVectors(c.lookFrom, c.lookTo, s));
+        }
+        wreck.update(dt);
+        if (cinematic.accelerate) {
             // le champ file vers l'arrière de plus en plus vite
             field.drift.z = Math.max(-900, field.drift.z - 500 * dt);
             for (const r of field.rocks) if (r.kind === 'threat') r.userData.velocity.set(0, 0, field.drift.z);

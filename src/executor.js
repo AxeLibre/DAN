@@ -113,6 +113,7 @@ export function initExecutor(ctx) {
     let executorTower = null;
     const towerExtras = [];
     const exteriorColliders = [];   // coque (MainHull) + tourelle : collisions en vol
+    let towerDestroyed = false;     // cinématique de destruction (mission astéroïdes)
 
     loader4.load('public/star_executor_web.glb', (gltf) => {
         executor = gltf.scene;
@@ -159,10 +160,14 @@ export function initExecutor(ctx) {
         _camLocal.copy(_camPos).applyMatrix4(hangarCut.toLocal.value);
         // même déclencheur que le cockpit (isInsideShip) ; en plus, cachée pendant
         // la courte traversée du tunnel à l'intérieur de la tourelle
-        const show = !state.isInsideShip && !towerTunnel.containsPoint(_camLocal);
+        const show = !towerDestroyed && !state.isInsideShip && !towerTunnel.containsPoint(_camLocal);
         executorTower.visible = show;
         for (const o of towerExtras) o.visible = show;
     }
 
-    return { exteriorColliders, inHangarCut, updateTower: updateExecutorTower };
+    return {
+        exteriorColliders, inHangarCut, updateTower: updateExecutorTower,
+        get root() { return executor; },
+        setTowerDestroyed(v) { towerDestroyed = v; }
+    };
 }
