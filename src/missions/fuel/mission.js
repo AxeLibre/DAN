@@ -207,9 +207,9 @@ export function initFuelMission(ctx, { hud, cine, returnToHangar }) {
     // -------------------------------------------------------------------------------------
     // Croiseur-citerne
     // -------------------------------------------------------------------------------------
-    const _p = new THREE.Vector3(), _t = new THREE.Vector3(), _look = new THREE.Object3D();
+    const _p = new THREE.Vector3(), _t = new THREE.Vector3(), _prev = new THREE.Vector3(), _look = new THREE.Object3D();
     function placeTank(dt) {
-        const prev = _t.copy(tank.position);
+        const prev = _prev.copy(tank.position);
         route.point(_p);
         tank.position.copy(_p);
         route.tangent(_t);
@@ -617,6 +617,7 @@ export function initFuelMission(ctx, { hud, cine, returnToHangar }) {
             if (route.remaining < 2) {
                 setPhase('refuel1');
                 tankSpeed = 0;
+                tankVel.set(0, 0, 0);               // amarré : il ne bouge plus
                 state.cruiseSpeed = FUEL.PLAYER_CRUISE.refuel;
                 hud.setObjective('PROTÈGE LE CROISEUR PENDANT LE CHARGEMENT');
                 ctx.battle.announce('Plein en cours !');
